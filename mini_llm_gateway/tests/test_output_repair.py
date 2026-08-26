@@ -55,7 +55,7 @@ async def test_bad_json_retries_upstream_then_fails(sdk, fake_provider, client):
             messages=[{"role": "user", "content": "hi"}],
             response_format={"type": "json_object"},
         )
-    assert exc_info.value.response.json()["error"]["code"] == "invalid_json"
+    assert exc_info.value.response.json()["error"]["code"] == "output.invalid_json"
     # 1 次原始调用 + max_retries(2) 次重试 = 3 次，边界明确
     assert len(fake_provider.complete_calls) == 3
 
@@ -79,7 +79,7 @@ async def test_max_retries_configurable(tmp_path, fake_provider, monkeypatch):
             },
         )
         assert response.status_code == 502
-        assert response.json()["error"]["code"] == "invalid_json"
+        assert response.json()["error"]["code"] == "output.invalid_json"
         assert len(fake_provider.complete_calls) == 1  # 0 重试：只有提取修复，不重试上游
 
 

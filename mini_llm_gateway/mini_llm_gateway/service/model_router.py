@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import itertools
+import json
+import logging
 import time
 from collections.abc import Callable
 
 from mini_llm_gateway.config import GatewayConfig, ResolvedTarget, RouteTarget
 from mini_llm_gateway.errors import GatewayError
+
+logger = logging.getLogger("llm_gateway")
 
 _HALF_OPEN = "half-open"
 _CLOSED = "closed"
@@ -32,20 +36,41 @@ class ModelRouter:
         self._circuits: dict[str, _CircuitState] = {}
         self._counters: dict[str, itertools.count] = {}
 
-    def candidates(self, mode: str, *, structured: bool = False) -> list[ResolvedTarget]:
+    def candidates(
+        self, mode: str, *, structured: bool = False, request_id: str | None = None
+    ) -> list[ResolvedTarget]:
         mode_config = self.config.modes.get(mode)
         if mode_config is None:
-            raise GatewayError("unknown_mode", f"档位不存在: {mode}（合法值: {sorted(self.config.modes)}）", 400)
-        healthy = [
-            target
-            for target in mode_config.targets
-            if self._is_available(target.key)
-            and self.config.providers[target.provider].enabled
-            and (target.supports_structured_output or not structured)
-        ]
+            raise GatewayError("route.unknown_mode", f"档位不存在: {mode}（合法值: {sorted(self.config.modes)}）", 400)
+        healthy: list[RouteTarget] = []
+        skipped: list[dict[str, str]] = []
+        for target in mode_config.targets:
+            if not self.config.providers[target.provider].enabled:
+                skipped.append({"target": target.key, "reason": "provider_disabled"})
+            elif not self._is_available(target.key):
+                skipped.append({"target": target.key, "reason": "circuit_open"})
+            elif structured and not target.supports_structured_output:
+                skipped.append({"target": target.key, "reason": "capability_mismatch"})
+            else:
+                healthy.append(target)
         if not healthy:
-            raise GatewayError("no_healthy_route", f"档位 {mode} 没有健康且能力匹配的路由目标", 503)
-        return [self._resolve(target) for target in self._ordered(mode, healthy)]
+            raise GatewayError("route.no_healthy_route", f"档位 {mode} 没有健康且能力匹配的路由目标", 503)
+        ordered = self._ordered(mode, healthy)
+        # 路由决策留痕：选中链（主选在前）+ 跳过项及原因，与 trace 的 attempts/actual_model 互补
+        logger.info(
+            "route_decision=%s",
+            json.dumps(
+                {
+                    "request_id": request_id,
+                    "mode": mode,
+                    "structured": structured,
+                    "selected": [t.key for t in ordered],
+                    "skipped": skipped,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        return [self._resolve(target) for target in ordered]
 
     def _ordered(self, mode: str, healthy: list[RouteTarget]) -> list[RouteTarget]:
         # 权重展开轮询选主选；其余候选按原配置顺序跟随，作为 fallback 链。
@@ -58,6 +83,7 @@ class ModelRouter:
     def _resolve(self, target: RouteTarget) -> ResolvedTarget:
         provider = self.config.providers[target.provider]
         return ResolvedTarget(
+            provider=target.provider,
             provider_model=target.model,
             key=target.key,
             base_url=provider.base_url,
@@ -82,7 +108,7 @@ class ModelRouter:
         # 供请求入口做快速失败校验，避免与真正选路重复消耗轮转位置。
         mode_config = self.config.modes.get(mode)
         if mode_config is None:
-            raise GatewayError("unknown_mode", f"档位不存在: {mode}（合法值: {sorted(self.config.modes)}）", 400)
+            raise GatewayError("route.unknown_mode", f"档位不存在: {mode}（合法值: {sorted(self.config.modes)}）", 400)
         return any(
             self._is_available(target.key)
             and self.config.providers[target.provider].enabled

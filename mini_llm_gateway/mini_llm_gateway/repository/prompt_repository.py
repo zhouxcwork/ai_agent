@@ -53,7 +53,7 @@ class PromptRepository:
     async def require(self, name: str, version: str) -> PromptTemplateRecord:
         record = await self.get(name, version)
         if record is None:
-            raise GatewayError("unknown_prompt_template", f"Prompt 模板不存在: {name}/{version}", 400)
+            raise GatewayError("prompt.unknown_template", f"Prompt 模板不存在: {name}/{version}", 400)
         return record
 
     async def list(self, name: str | None = None) -> list[PromptTemplateRecord]:
@@ -72,7 +72,7 @@ class PromptRepository:
         # 版本不可变：重复 (name, version) 拒绝，调用方必须使用新版本号。
         if await self.exists(template.name, template.version):
             raise GatewayError(
-                "prompt_version_conflict",
+                "prompt.version_conflict",
                 f"模板版本已存在: {template.name}/{template.version}，请使用新版本号",
                 409,
             )
@@ -90,10 +90,10 @@ class PromptRepository:
         try:
             content = self.env.from_string(record.system_template).render(**variables)
         except UndefinedError as exc:
-            raise GatewayError("missing_prompt_variable", f"缺少 Prompt 变量: {exc}", 400) from exc
+            raise GatewayError("prompt.missing_variable", f"缺少 Prompt 变量: {exc}", 400) from exc
         except Exception as exc:
-            raise GatewayError("prompt_render_failed", f"Prompt 渲染失败: {exc}", 400) from exc
+            raise GatewayError("prompt.render_failed", f"Prompt 渲染失败: {exc}", 400) from exc
         content = content.strip()
         if not content:
-            raise GatewayError("prompt_render_failed", "Prompt 渲染结果为空", 400)
+            raise GatewayError("prompt.render_failed", "Prompt 渲染结果为空", 400)
         return Message(role="system", content=content)

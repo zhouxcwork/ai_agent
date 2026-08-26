@@ -5,9 +5,10 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from mini_llm_gateway.api.deps import tenant_scope
 from mini_llm_gateway.errors import GatewayError
 from mini_llm_gateway.repository.response_repository import ResponseRepository, StoredResponse
 from mini_llm_gateway.schemas.llm import LLMRequest, Message
@@ -27,9 +28,13 @@ def _sse(payload: dict[str, Any]) -> str:
 
 
 @router.post("/v1/responses", response_model=None)
-async def create_response(payload: ResponsesRequest, http: Request) -> JSONResponse | StreamingResponse:
-    # OpenAI Responses 方言入口：请求规范化 → 会话上下文展开 → 内部调用 → 响应翻译与存储。
+async def create_response(
+    payload: ResponsesRequest, http: Request, tenant: str | None = Depends(tenant_scope)
+) -> JSONResponse | StreamingResponse:
+    # OpenAI Responses 方言入口：认证/限流依赖 → 请求规范化 → 会话上下文展开 → 内部调用 → 响应翻译与存储。
     request: LLMRequest = normalize_responses_request(payload)
+    request.tenant_id = tenant
+    request.run_id = http.headers.get("X-Run-Id")  # 调用方业务链路标识，透录进 trace
     gateway = http.app.state.gateway
     repo: ResponseRepository = http.app.state.responses
 
@@ -37,7 +42,7 @@ async def create_response(payload: ResponsesRequest, http: Request) -> JSONRespo
         parent = await repo.get(payload.previous_response_id)
         if parent is None:
             raise GatewayError(
-                "response_not_found",
+                "request.response_not_found",
                 f"previous_response_id 不存在或未存储: {payload.previous_response_id}",
                 404,
             )
@@ -73,6 +78,7 @@ async def create_response(payload: ResponsesRequest, http: Request) -> JSONRespo
         content=response.content,
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
+        finish_reason=response.finish_reason,
     )
     return JSONResponse(body.model_dump(), headers={"X-Request-ID": response.request_id})
 
@@ -86,7 +92,9 @@ async def _event_stream(
     text_parts: list[str] = []
     stream_state: dict[str, Any] = {"request_id": "", "model": None, "usage": None}
 
-    def response_skeleton(status: str, output_text: str = "", error: dict[str, Any] | None = None) -> dict[str, Any]:
+    def response_skeleton(
+        status: str, output_text: str = "", error: dict[str, Any] | None = None, finish_reason: str = "stop"
+    ) -> dict[str, Any]:
         usage = stream_state.get("usage") or {"input_tokens": 0, "output_tokens": 0}
         total = usage["input_tokens"] + usage["output_tokens"]
         body: dict[str, Any] = {
@@ -95,7 +103,7 @@ async def _event_stream(
             "created_at": created_at,
             "model": request.model,
             "actual_model": stream_state["model"],
-            "status": status,
+            "status": "incomplete" if finish_reason == "content_filter" else status,
             "output": []
             if not output_text
             else [
@@ -109,6 +117,9 @@ async def _event_stream(
             ],
             "usage": {"input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"], "total_tokens": total},
         }
+        if finish_reason == "content_filter":
+            # 安全拒答（ADR 0010）：Responses 方言以 incomplete + incomplete_details 表达
+            body["incomplete_details"] = {"reason": "content_filter"}
         if error is not None:
             body["error"] = error
         return body
@@ -149,7 +160,14 @@ async def _event_stream(
                         created_at=ResponseRepository.now_iso(),
                     )
                 )
-            yield _sse({"type": "response.completed", "response": response_skeleton("completed", output_text)})
+            yield _sse(
+                {
+                    "type": "response.completed",
+                    "response": response_skeleton(
+                        "completed", output_text, finish_reason=event.get("finish_reason", "stop")
+                    ),
+                }
+            )
         elif event["type"] == "response.failed":
             if not text_parts:
                 yield _sse({"type": "response.created", "response": response_skeleton("in_progress")})
@@ -161,7 +179,7 @@ async def _event_stream(
                         error={
                             "message": "上游流式调用失败",
                             "type": "gateway_error",
-                            "code": event.get("error", "upstream_stream_failed"),
+                            "code": event.get("error", "upstream.stream_failed"),
                         },
                     ),
                 }

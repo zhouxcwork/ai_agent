@@ -44,7 +44,7 @@ async def test_chat_structured_stream_syntax_break_cuts_stream(sdk, fake_provide
 
     trace = client.get("/v1/traces").json()[0]
     assert trace["status"] == "failed"
-    assert trace["error_code"] == "invalid_json"
+    assert trace["error_code"] == "output.invalid_json"
 
 
 async def test_chat_structured_stream_schema_mismatch_fails_at_tail(sdk, fake_provider, client):
@@ -61,7 +61,7 @@ async def test_chat_structured_stream_schema_mismatch_fails_at_tail(sdk, fake_pr
 
     trace = client.get("/v1/traces").json()[0]
     assert trace["status"] == "failed"
-    assert trace["error_code"] == "schema_validation_failed"
+    assert trace["error_code"] == "output.schema_validation_failed"
 
 
 async def test_responses_structured_stream_success(sdk, fake_provider):
@@ -88,10 +88,10 @@ async def test_responses_structured_stream_syntax_break(sdk, fake_provider, clie
         )
     ]
     failed = [e for e in events if e.type == "response.failed"]
-    assert failed and failed[0].response.error.code == "invalid_json"
+    assert failed and failed[0].response.error.code == "output.invalid_json"
 
     trace = client.get("/v1/traces").json()[0]
-    assert trace["error_code"] == "invalid_json"
+    assert trace["error_code"] == "output.invalid_json"
 
 
 async def test_structured_content_failures_do_not_trip_circuit(sdk, fake_provider, client):

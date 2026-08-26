@@ -7,6 +7,7 @@ from mini_llm_gateway.repository.prompt_repository import PromptRepository
 from mini_llm_gateway.repository.trace_repository import TraceRepository
 from mini_llm_gateway.schemas.llm import LLMRequest, Message
 from mini_llm_gateway.service.gateway_service import GatewayService
+from mini_llm_gateway.service.limiter import Limiter
 from mini_llm_gateway.service.model_router import ModelRouter
 from tests.conftest import PRIMARY_KEY, PRIMARY_MODEL, make_config
 
@@ -43,7 +44,7 @@ async def test_client_disconnect_records_cancelled_trace(tmp_path, fake_provider
     traces = TraceRepository(config.database.path)
     await prompts.initialize()
     await traces.initialize()
-    gateway = GatewayService(config, ModelRouter(config), fake_provider, prompts, traces)
+    gateway = GatewayService(config, ModelRouter(config), fake_provider, prompts, traces, Limiter(config))
 
     request = LLMRequest(model="fast", messages=[Message(role="user", content="hi")], stream=True)
     generator = gateway.stream(request)
@@ -53,7 +54,7 @@ async def test_client_disconnect_records_cancelled_trace(tmp_path, fake_provider
 
     rows = await traces.list()
     assert rows[0].status == "cancelled"
-    assert rows[0].error_code == "client_cancelled"
+    assert rows[0].error_code == "stream.client_cancelled"
     assert rows[0].actual_model == PRIMARY_KEY
     assert rows[0].input_tokens == 0  # usage 末块尚未到达
 

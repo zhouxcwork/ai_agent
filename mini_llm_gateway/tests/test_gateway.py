@@ -9,12 +9,12 @@ def test_all_targets_unavailable_records_failed_trace(client, fake_provider):
         "/v1/chat/completions",
         json={"model": "fast", "messages": [{"role": "user", "content": "hi"}]},
     )
-    assert response.status_code == 502
-    assert response.json()["error"]["code"] == "model_unavailable"
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "route.model_unavailable"
 
     traces = client.get("/v1/traces").json()
     assert traces[0]["status"] == "failed"
-    assert traces[0]["error_code"] == "model_unavailable"
+    assert traces[0]["error_code"] == "route.model_unavailable"
     assert traces[0]["endpoint"] == "chat_completions"
 
 
@@ -33,6 +33,19 @@ def test_fallback_records_actual_target_in_trace(client, fake_provider):
     assert trace["status"] == "success"
     assert trace["actual_model"] == BACKUP_KEY
     assert trace["cost_usd"] > 0
+
+
+def test_stream_retries_target_per_config_before_fallback(client, fake_provider):
+    # 流式与非流式一致：首块前同目标按 attempts_per_target（默认 2）重试，再切换候选
+    fake_provider.fail_models = {PRIMARY_MODEL}
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "fast", "messages": [{"role": "user", "content": "hi"}], "stream": True},
+    )
+    assert response.status_code == 200
+    assert "[DONE]" in response.text  # 切换后流完整走完（正文被 SSE JSON 转义，不做原文断言）
+    assert fake_provider.stream_calls.count(PRIMARY_MODEL) == 2
+    assert fake_provider.stream_calls[-1] == BACKUP_MODEL
 
 
 def test_legacy_llm_endpoints_removed(client):

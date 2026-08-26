@@ -104,4 +104,4 @@ def test_all_targets_tripped_returns_503(tmp_path, fake_provider, monkeypatch):
             json={"model": "fast", "messages": [{"role": "user", "content": "hi"}]},
         )
         assert response.status_code == 503
-        assert response.json()["error"]["code"] == "no_healthy_route"
+        assert response.json()["error"]["code"] == "route.no_healthy_route"

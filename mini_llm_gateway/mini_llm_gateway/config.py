@@ -52,11 +52,39 @@ class StructuredOutputConfig(BaseModel):
     max_retries: int = Field(default=2, ge=0, le=5)
 
 
+class AuthConfig(BaseModel):
+    # 调用方认证白名单：apikey → tenantId；为空 = 不启用认证（本地开发）。
+    # 后续对接外部鉴权系统时替换这一映射来源即可。
+    api_keys: dict[str, str] = Field(default_factory=dict)
+
+
+class TenantLimitConfig(BaseModel):
+    # 单租户资源边界：QPS 令牌桶（容量即突发额度）+ 并发上限，超限快速拒绝。
+    qps: float = Field(default=10, gt=0)
+    burst: int = Field(default=20, ge=1)
+    max_concurrency: int = Field(default=5, ge=1)
+
+
+class TargetLimitConfig(BaseModel):
+    # 单路由目标（供应商/模型）并发上限，对齐上游按模型的并发配额；未配置的目标不限制。
+    max_concurrency: int = Field(default=20, ge=1)
+
+
+class LimitsConfig(BaseModel):
+    default: TenantLimitConfig = Field(default_factory=TenantLimitConfig)
+    tenants: dict[str, TenantLimitConfig] = Field(default_factory=dict)
+    targets: dict[str, TargetLimitConfig] = Field(default_factory=dict)
+
+
 class GatewayConfig(BaseModel):
     database: DatabaseConfig = DatabaseConfig()
     admin: AdminConfig = AdminConfig()
+    auth: AuthConfig = AuthConfig()
+    limits: LimitsConfig = LimitsConfig()
     circuit_breaker: CircuitBreakerConfig = CircuitBreakerConfig()
     structured_output: StructuredOutputConfig = StructuredOutputConfig()
+    # Fallback 切换前每个路由目标的尝试次数（流式与非流式一致）
+    attempts_per_target: int = Field(default=2, ge=1)
     providers: dict[str, ProviderConfig]
     modes: dict[str, ModeConfig]
 
@@ -75,6 +103,7 @@ class GatewayConfig(BaseModel):
 
 class ResolvedTarget(BaseModel):
     # 路由决策产物：路由目标 + 供应商连接信息合一，供供应商适配层与成本计算使用。
+    provider: str
     provider_model: str
     key: str  # 供应商/模型，对外即 actual_model
     base_url: str

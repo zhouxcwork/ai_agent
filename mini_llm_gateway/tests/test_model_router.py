@@ -20,6 +20,7 @@ def make_config(fast_targets: list[RouteTarget], threshold: int = 5, cooldown: f
         providers={
             "p1": ProviderConfig(base_url="http://p1", api_key_env="K1"),
             "p2": ProviderConfig(base_url="http://p2", api_key_env="K2"),
+            "p3": ProviderConfig(base_url="http://p3", api_key_env="K3"),
             "disabled": ProviderConfig(base_url="http://d", api_key_env="KD", enabled=False),
         },
         modes={"fast": ModeConfig(targets=fast_targets)},
@@ -54,7 +55,7 @@ def test_unknown_mode_raises(clock):
     router = ModelRouter(make_config([target("p1", "m1")]), clock=clock)
     with pytest.raises(GatewayError) as exc_info:
         router.candidates("slow")
-    assert exc_info.value.code == "unknown_mode"
+    assert exc_info.value.code == "route.unknown_mode"
     assert exc_info.value.status_code == 400
 
 
@@ -80,7 +81,7 @@ def test_no_healthy_route(clock):
     router = ModelRouter(make_config([target("disabled", "m1")]), clock=clock)
     with pytest.raises(GatewayError) as exc_info:
         router.candidates("fast")
-    assert exc_info.value.code == "no_healthy_route"
+    assert exc_info.value.code == "route.no_healthy_route"
     assert exc_info.value.status_code == 503
 
 
@@ -148,7 +149,7 @@ def test_all_targets_tripped_raises_no_healthy_route(clock):
         router.record_failure(key)
     with pytest.raises(GatewayError) as exc_info:
         router.candidates("fast")
-    assert exc_info.value.code == "no_healthy_route"
+    assert exc_info.value.code == "route.no_healthy_route"
 
 
 def test_status_reports_health(clock):
@@ -161,3 +162,31 @@ def test_status_reports_health(clock):
     assert status["p1/a"]["state"] == "closed"
     router.record_failure("p1/a")
     assert router.status()["p1/a"]["state"] == "open"
+
+
+def test_route_decision_logs_selected_and_skipped_reasons(clock, caplog):
+    import json
+    import logging
+
+    config = make_config(
+        [target("disabled", "m1"), target("p1", "tripped"), target("p2", "plain", structured=False), target("p3", "ok")],
+        threshold=2,
+    )
+    router = ModelRouter(config, clock=clock)
+    router.record_failure("p1/tripped")
+    router.record_failure("p1/tripped")
+    with caplog.at_level(logging.INFO, logger="llm_gateway"):
+        keys = [t.key for t in router.candidates("fast", structured=True, request_id="rid-1")]
+    assert keys == ["p3/ok"]
+    decision = json.loads(
+        next(
+            record.getMessage().removeprefix("route_decision=")
+            for record in caplog.records
+            if record.getMessage().startswith("route_decision=")
+        )
+    )
+    assert decision["request_id"] == "rid-1"
+    assert decision["selected"] == ["p3/ok"]
+    assert {"target": "disabled/m1", "reason": "provider_disabled"} in decision["skipped"]
+    assert {"target": "p1/tripped", "reason": "circuit_open"} in decision["skipped"]
+    assert {"target": "p2/plain", "reason": "capability_mismatch"} in decision["skipped"]

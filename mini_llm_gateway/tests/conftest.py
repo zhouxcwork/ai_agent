@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -9,15 +10,18 @@ from fastapi.testclient import TestClient
 from mini_llm_gateway.app import create_app
 from mini_llm_gateway.config import (
     AdminConfig,
+    AuthConfig,
     CircuitBreakerConfig,
     DatabaseConfig,
     GatewayConfig,
+    LimitsConfig,
     ModeConfig,
     ProviderConfig,
     ResolvedTarget,
     RouteTarget,
     StructuredOutputConfig,
 )
+from mini_llm_gateway.provider.base import ContentRefusedError, FinishReason, UpstreamID
 from mini_llm_gateway.schemas.llm import Message, Usage
 
 ADMIN_TOKEN_ENV = "TEST_ADMIN_TOKEN"
@@ -33,9 +37,13 @@ class FakeProvider:
     def __init__(self) -> None:
         self.contents: dict[str, str] = {}
         self.fail_models: set[str] = set()
+        self.refuse_models: set[str] = set()  # 安全拒答：非流式抛 ContentRefusedError，流式标 content_filter
         self.complete_calls: list[str] = []
+        self.stream_calls: list[str] = []
         self.last_messages: list[Message] = []
         self.stream_chunks: list[str] | None = None  # None 时用默认增量 ["你", "好"]
+        self.delay_seconds: float = 0.0  # 模拟上游耗时，供并发限流测试制造在途窗口
+        self.usage = Usage(input_tokens=10, output_tokens=5)  # 可覆写以测试 usage 细分与计价
 
     async def complete(
         self,
@@ -43,12 +51,16 @@ class FakeProvider:
         messages: list[Message],
         timeout_seconds: float,
         response_schema: dict[str, Any] | None,
-    ) -> tuple[str, Usage]:
+    ) -> tuple[str, Usage, str | None]:
         self.complete_calls.append(target.provider_model)
         self.last_messages = list(messages)
+        if self.delay_seconds:
+            await asyncio.sleep(self.delay_seconds)
+        if target.provider_model in self.refuse_models:
+            raise ContentRefusedError(f"refused by policy: {target.provider_model}")
         if target.provider_model in self.fail_models:
             raise TimeoutError(f"upstream {target.provider_model} timeout")
-        return self.contents.get(target.provider_model, "ok"), Usage(input_tokens=10, output_tokens=5)
+        return self.contents.get(target.provider_model, "ok"), self.usage, f"upstream-{target.provider_model}"
 
     async def stream(
         self,
@@ -56,13 +68,22 @@ class FakeProvider:
         messages: list[Message],
         timeout_seconds: float,
         response_schema: dict[str, Any] | None = None,
-    ) -> AsyncIterator[str | Usage]:
+    ) -> AsyncIterator[str | Usage | FinishReason | UpstreamID]:
+        self.stream_calls.append(target.provider_model)
+        if self.delay_seconds:
+            await asyncio.sleep(self.delay_seconds)
+        yield UpstreamID(f"upstream-{target.provider_model}")
+        if target.provider_model in self.refuse_models:
+            yield "抱歉"
+            yield FinishReason("content_filter")
+            return
         if target.provider_model in self.fail_models:
             raise TimeoutError(f"upstream {target.provider_model} timeout")
         chunks = self.stream_chunks if self.stream_chunks is not None else ["你", "好"]
         for delta in chunks:
             yield delta
-        yield Usage(input_tokens=10, output_tokens=5)  # 模拟 include_usage 末块
+        yield FinishReason("stop")  # 模拟上游末块结束原因
+        yield self.usage  # 模拟 include_usage 末块
 
 
 def make_config(
@@ -71,6 +92,8 @@ def make_config(
     failure_threshold: int = 5,
     cooldown_seconds: float = 30.0,
     structured_max_retries: int = 2,
+    auth_keys: dict[str, str] | None = None,
+    limits: LimitsConfig | None = None,
 ) -> GatewayConfig:
     def target(provider: str, model: str, price_input: float) -> RouteTarget:
         return RouteTarget(
@@ -84,6 +107,8 @@ def make_config(
     return GatewayConfig(
         database=DatabaseConfig(path=database_path),
         admin=AdminConfig(token_env=ADMIN_TOKEN_ENV),
+        auth=AuthConfig(api_keys=auth_keys or {}),
+        limits=limits or LimitsConfig(),
         circuit_breaker=CircuitBreakerConfig(
             failure_threshold=failure_threshold, cooldown_seconds=cooldown_seconds
         ),

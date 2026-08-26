@@ -89,7 +89,7 @@ async def test_sdk_responses_rejects_tools(sdk):
             input="hi",
             tools=[{"type": "function", "name": "f", "parameters": {}, "description": ""}],
         )
-    assert exc_info.value.response.json()["error"]["code"] == "unsupported_parameter"
+    assert exc_info.value.response.json()["error"]["code"] == "request.unsupported_parameter"
 
 
 async def test_responses_trace_endpoint(client, fake_provider):

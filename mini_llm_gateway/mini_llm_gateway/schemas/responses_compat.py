@@ -82,6 +82,7 @@ class ResponseObject(BaseModel):
     model: str  # requested_model（档位名）
     actual_model: str  # 扩展字段：路由目标
     status: str = "completed"
+    incomplete_details: dict[str, str] | None = None  # status=incomplete 时的原因（如 content_filter）
     output: list[OutputMessage]
     usage: ResponseUsage
 
@@ -97,7 +98,7 @@ def normalize_responses_request(payload: ResponsesRequest) -> LLMRequest:
     # Responses 请求 → 内部 LLMRequest；input 三形态、instructions、结构化在此归一。
     for param in _UNSUPPORTED_PARAMS:
         if getattr(payload, param, None) is not None:
-            raise GatewayError("unsupported_parameter", f"网关不支持参数: {param}", 400)
+            raise GatewayError("request.unsupported_parameter", f"网关不支持参数: {param}", 400)
 
     messages: list[Message] = []
     if payload.instructions is not None:
@@ -109,7 +110,7 @@ def normalize_responses_request(payload: ResponsesRequest) -> LLMRequest:
         for item in payload.input:
             role = _ROLE_MAP.get(item.role)
             if role is None:
-                raise GatewayError("unsupported_parameter", f"不支持的消息角色: {item.role}", 400)
+                raise GatewayError("request.unsupported_parameter", f"不支持的消息角色: {item.role}", 400)
             messages.append(Message(role=role, content=_flatten_content(item.content)))
 
     response_schema = None
@@ -118,7 +119,7 @@ def normalize_responses_request(payload: ResponsesRequest) -> LLMRequest:
     if format_type == "json_schema":
         schema = text_format.get("schema")
         if not isinstance(schema, dict):
-            raise GatewayError("unsupported_parameter", "text.format.schema 缺失", 400)
+            raise GatewayError("request.unsupported_parameter", "text.format.schema 缺失", 400)
         response_schema = schema
     elif format_type == "json_object":
         response_schema = {"type": "object"}
@@ -139,24 +140,28 @@ def _flatten_content(content: str | list[ResponseContentBlock]) -> str:
     texts = []
     for block in content:
         if block.type not in _TEXT_BLOCK_TYPES or block.text is None:
-            raise GatewayError("unsupported_parameter", f"不支持的内容块类型: {block.type}", 400)
+            raise GatewayError("request.unsupported_parameter", f"不支持的内容块类型: {block.type}", 400)
         texts.append(block.text)
     joined = "\n".join(texts)
     if not joined:
-        raise GatewayError("unsupported_parameter", "消息内容不能为空", 400)
+        raise GatewayError("request.unsupported_parameter", "消息内容不能为空", 400)
     return joined
 
 
 def to_response_object(
     request_id: str, requested_model: str, actual_model: str, content: str,
-    input_tokens: int, output_tokens: int,
+    input_tokens: int, output_tokens: int, finish_reason: str = "stop",
 ) -> ResponseObject:
     # 内部结果 → OpenAI response 对象；usage 用 responses 协议字段名。
+    # content_filter（安全拒答）按 Responses 方言表达：status=incomplete + incomplete_details（ADR 0010）。
+    refused = finish_reason == "content_filter"
     return ResponseObject(
         id=f"resp-{request_id}",
         created_at=int(time.time()),
         model=requested_model,
         actual_model=actual_model,
+        status="incomplete" if refused else "completed",
+        incomplete_details={"reason": "content_filter"} if refused else None,
         output=[OutputMessage(id=f"msg-{request_id}", content=[OutputTextContent(text=content)])],
         usage=ResponseUsage(
             input_tokens=input_tokens,

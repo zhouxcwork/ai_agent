@@ -39,26 +39,63 @@ cp .env.example .env && docker compose up -d   # SQLite 持久化在 ./data
 | POST | `/v1/chat/completions` | Chat Completions 方言（非流式 + chunk 流式） |
 | POST | `/v1/responses` | Responses 方言（非流式 + 类型化事件流式 + 会话续接） |
 | GET | `/v1/models` | 档位列表 + 各路由目标健康状态（gateway_routes 扩展字段） |
-| GET | `/v1/traces?limit=50&offset=0` | 调用 trace（含 endpoint / 档位 / 实际目标 / 成本） |
+| GET | `/v1/traces?limit=50&offset=0` | 调用 trace（见下方字段清单） |
 | GET/POST | `/v1/prompts` | 模板列表 / 创建新版本（写需 `X-Admin-Token`） |
 | POST | `/v1/prompts/{name}/{version}/render` | 渲染预览 |
 | GET | `/admin` | 模板管理页面 |
 
-错误统一 OpenAI 格式：`{"error": {"message", "type", "param", "code"}}`。
+错误统一 OpenAI 格式：`{"error": {"message", "type", "param", "code"}}`；**code 为点分分段码 `<段>.<码>`**（ADR 0010），段决定重试语义：
+
+| 段 | 含义 | 典型码 | 调用方动作 |
+|---|---|---|---|
+| auth | 调用方/管理面身份 | `auth.invalid_key` 401 | 修正凭据 |
+| request | 参数与会话引用 | `request.validation_error` 422、`request.response_not_found` 404 | 修正请求 |
+| prompt | 模板资产 | `prompt.missing_variable` 400、`prompt.version_conflict` 409 | 修正变量/版本 |
+| route | 档位路由 | `route.unknown_mode` 400、`route.no_healthy_route` / `route.model_unavailable` 503 | 稍后重试/改配置 |
+| resource | 资源边界 | `resource.tenant_rate_limited` / `tenant_busy` / `target_busy` 429 | 退避后重试 |
+| upstream | 供应商侧故障 | `upstream.stream_failed`（流内事件与 trace） | 无需动作（网关已重试/fallback） |
+| stream | 流中传输中断 | `stream.client_cancelled`（trace） | 重新发请求 |
+| output | 输出校验 | `output.invalid_json` / `output.schema_validation_failed` 502 | 修 Schema/提示词 |
+| content | 内容拒答 | `content.refused`（trace；对外透传 finish_reason） | 修改输入内容 |
+| platform | 网关自身 | `platform.misconfigured` 503 | 联系管理员 |
+
+## 认证与资源边界（ADR 0011）
+
+- **调用方认证**：`Authorization: Bearer <apikey>`，config.yaml `auth.api_keys` 白名单维护 apikey → tenantId；白名单为空 = 不启用认证（本地开发）
+- **三级限流，全部 429 快速拒绝**：租户 QPS 令牌桶（容量 = 突发额度）、租户并发、路由目标并发（`供应商/模型` 粒度，同供应商不同模型互不挤占；占满则跳过该候选，全部占满报 `resource.target_busy`）
+- **内容拒答不绕过**：上游 `finish_reason=content_filter` 时不重试、不换模型，200 + finish_reason 透传（Responses 方言为 status=incomplete），trace 记 `refused` 状态
+
+## Trace 可观测字段（ADR 0012）
+
+| 维度 | 字段 |
+|---|---|
+| 关联 | `request_id`（单次调用 ID）、`run_id`（调用方 `X-Run-Id` 头透传）、`endpoint` |
+| 路由 | `requested_model`（档位）、`actual_model`（供应商/模型）、`attempts`；候选链与跳过原因在 `route_decision` 结构化日志（按 request_id 关联） |
+| Prompt | `prompt_name` / `prompt_version`（不可变，即内容定位） |
+| 用量 | `input_tokens`、`output_tokens`、`cached_tokens`（含于 input）、`reasoning_tokens`（含于 output） |
+| 延迟 | `latency_ms`（总）、`ttft_ms`（首个业务 delta，非流式为空）；generation = latency − ttft |
+| 结果 | `status`（success/failed/refused/cancelled）、`finish_reason`、`error_code`（分段码） |
+| 错误 | `error_code`（稳定分段码，HTTP 状态可由其映射）、`upstream_request_id`（定位上游日志） |
+| 成本 | `cost_usd`（cached 按价格表可选 `cached` 键折扣计价，缺省=输入全价） |
+
+**指标与日志分工**：Logs（`llm_call_trace` / `route_decision` 结构化日志）记单次细节，Trace（SQLite 表）供查询与离线聚合（`evals/routing_report.py`）；在线 Metrics 端点暂不提供（单实例 MVP，ADR 0012）。
 
 ## 档位路由（model 字段语义）
 
 **model 字段只接受档位名**（`fast` / `smart`，config.yaml 可扩展），传具体模型名（如 `gpt-4o`）返回 400 `unknown_mode`。响应 `model` 回显档位名，实际命中的路由目标在扩展字段 `actual_model`（格式 `供应商/模型`，如 `deepseek/deepseek-chat`）。
 
-- 档位候选池按**权重轮询**分流；主选失败自动切换剩余健康候选（流式仅首块前可切换）
+- 档位候选池按**权重轮询**分流；主选失败先在同目标按 `attempts_per_target`（默认 2）重试，再切换剩余健康候选（流式仅首块前可重试/切换）
+- 每次选路输出 `route_decision` 结构化日志（选中链 + 跳过目标及原因：熔断中/供应商停用/能力不匹配），与 trace 的 attempts/actual_model 互补
 - 每个路由目标独立维护**熔断**：连续失败 ≥ 阈值熔断，冷却期满半开试探，成功恢复（参数在 `circuit_breaker` 段）
+- 候选耗尽或无健康候选返回 503（`model_unavailable` / `no_healthy_route`）；流式场景以流内失败事件收尾
 
 ## SDK 调用示例
 
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://127.0.0.1:8000/v1", api_key="anything")
+client = OpenAI(base_url="http://127.0.0.1:8000/v1", api_key="replace-with-a-long-random-secret")
+# api_key 对应 config.yaml auth.api_keys 白名单中的 key；白名单为空时任意值即可
 
 # 非流式
 completion = client.chat.completions.create(model="fast", messages=[...])
@@ -104,10 +141,14 @@ second = client.responses.create(model="smart", input="第二轮", previous_resp
 - `providers.*`：供应商连接（base_url、api_key_env 环境变量名、enabled 开关）
 - `modes.<档位>.targets[]`：候选池（provider、model、weight、结构化能力、单价）
 - `circuit_breaker`：failure_threshold / cooldown_seconds
+- `attempts_per_target`：fallback 切换前每目标尝试次数（流式与非流式一致，默认 2）
+- `auth.api_keys`：调用方白名单 apikey → tenantId（为空 = 不启用认证）
+- `limits`：租户 QPS/burst/并发（default + tenants 覆盖）与路由目标并发（`targets`，键 = `供应商/模型`）
 - `database.path`：SQLite 路径；`admin.token_env`：管理令牌环境变量名
 
-## 测试
+## 测试与路由质量报告
 
 ```bash
-uv run --extra dev pytest    # 含真实 openai SDK 直连集成测试（FakeProvider 驱动）
+uv run --extra dev pytest                                  # 含真实 openai SDK 直连集成测试（FakeProvider 驱动）
+uv run python evals/routing_report.py --db data/gateway.db # 离线路由质量报告（成功率/fallback 率/各目标表现），--json 输出 JSON
 ```

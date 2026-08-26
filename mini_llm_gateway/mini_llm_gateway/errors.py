@@ -33,7 +33,7 @@ async def validation_error_handler(_: Request, exc: RequestValidationError) -> J
                 "message": "Invalid request",
                 "type": "invalid_request_error",
                 "param": None,
-                "code": "validation_error",
+                "code": "request.validation_error",
                 "details": jsonable_encoder(exc.errors()),
             }
         },

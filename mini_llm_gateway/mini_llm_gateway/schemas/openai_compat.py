@@ -80,13 +80,13 @@ def normalize_chat_request(payload: ChatCompletionRequest) -> LLMRequest:
     # OpenAI Chat Completions 请求 → 内部 LLMRequest；不支持的组合与能力在此拒绝。
     for param in _UNSUPPORTED_PARAMS:
         if getattr(payload, param, None) not in (None, 1):
-            raise GatewayError("unsupported_parameter", f"网关不支持参数: {param}", 400)
+            raise GatewayError("request.unsupported_parameter", f"网关不支持参数: {param}", 400)
 
     messages = []
     for message in payload.messages:
         role = _ROLE_MAP.get(message.role)
         if role is None:
-            raise GatewayError("unsupported_parameter", f"不支持的消息角色: {message.role}", 400)
+            raise GatewayError("request.unsupported_parameter", f"不支持的消息角色: {message.role}", 400)
         messages.append(Message(role=role, content=message.content))
 
     response_schema = _extract_response_schema(payload.response_format)
@@ -108,7 +108,7 @@ def _extract_response_schema(response_format: dict[str, Any] | None) -> dict[str
     if format_type == "json_schema":
         schema = (response_format.get("json_schema") or {}).get("schema")
         if not isinstance(schema, dict):
-            raise GatewayError("unsupported_parameter", "response_format.json_schema.schema 缺失", 400)
+            raise GatewayError("request.unsupported_parameter", "response_format.json_schema.schema 缺失", 400)
         return schema
     if format_type == "json_object":
         return {"type": "object"}
@@ -116,14 +116,15 @@ def _extract_response_schema(response_format: dict[str, Any] | None) -> dict[str
 
 
 def to_chat_completion(request_id: str, requested_model: str, actual_model: str, content: str,
-                       input_tokens: int, output_tokens: int) -> ChatCompletionResponse:
+                       input_tokens: int, output_tokens: int, finish_reason: str = "stop") -> ChatCompletionResponse:
     # 内部结果 → OpenAI chat.completion 响应；model 回显档位名，actual_model 透出路由目标。
+    # content_filter（安全拒答）按 OpenAI 方言透传：200 + finish_reason（ADR 0010）。
     return ChatCompletionResponse(
         id=f"chatcmpl-{request_id}",
         created=int(time.time()),
         model=requested_model,
         actual_model=actual_model,
-        choices=[ChatChoice(message=ChatMessageOut(content=content))],
+        choices=[ChatChoice(message=ChatMessageOut(content=content), finish_reason=finish_reason)],
         usage=ChatUsage(
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,

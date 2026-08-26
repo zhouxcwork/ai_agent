@@ -18,6 +18,7 @@ from mini_llm_gateway.repository.response_repository import ResponseRepository
 from mini_llm_gateway.repository.trace_repository import TraceRepository
 from mini_llm_gateway.schemas.prompt import PromptTemplateCreate
 from mini_llm_gateway.service.gateway_service import GatewayService
+from mini_llm_gateway.service.limiter import Limiter
 from mini_llm_gateway.service.model_router import ModelRouter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -59,8 +60,10 @@ def create_app(config: GatewayConfig | None = None, provider: Provider | None = 
         app.state.traces = traces
         app.state.responses = responses
         app.state.router = ModelRouter(gateway_config)
+        app.state.limiter = Limiter(gateway_config)
         app.state.gateway = GatewayService(
-            gateway_config, app.state.router, provider or OpenAICompatibleProvider(), prompts, traces
+            gateway_config, app.state.router, provider or OpenAICompatibleProvider(), prompts, traces,
+            app.state.limiter,
         )
         yield
 

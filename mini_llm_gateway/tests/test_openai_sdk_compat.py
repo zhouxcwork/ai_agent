@@ -77,7 +77,7 @@ async def test_sdk_error_unknown_mode_raises_api_error(sdk):
     with pytest.raises(BadRequestError) as exc_info:
         await sdk.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
     body = exc_info.value.response.json()
-    assert body["error"]["code"] == "unknown_mode"
+    assert body["error"]["code"] == "route.unknown_mode"
     assert body["error"]["type"] == "invalid_request_error"
 
 
@@ -88,7 +88,7 @@ async def test_sdk_error_tools_unsupported(sdk):
             messages=[{"role": "user", "content": "hi"}],
             tools=[{"type": "function", "function": {"name": "f", "parameters": {}}}],
         )
-    assert exc_info.value.response.json()["error"]["code"] == "unsupported_parameter"
+    assert exc_info.value.response.json()["error"]["code"] == "request.unsupported_parameter"
 
 
 async def test_sdk_error_validation_is_openai_format(client):
@@ -96,7 +96,7 @@ async def test_sdk_error_validation_is_openai_format(client):
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["type"] == "invalid_request_error"
-    assert body["error"]["code"] == "validation_error"
+    assert body["error"]["code"] == "request.validation_error"
 
 
 async def test_sdk_error_invalid_json_content(client, fake_provider):
@@ -110,7 +110,7 @@ async def test_sdk_error_invalid_json_content(client, fake_provider):
         },
     )
     assert response.status_code == 502
-    assert response.json()["error"]["code"] == "invalid_json"
+    assert response.json()["error"]["code"] == "output.invalid_json"
 
 
 async def test_sdk_chat_stream_chunks(sdk, fake_provider):

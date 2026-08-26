@@ -5,9 +5,10 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from mini_llm_gateway.api.deps import tenant_scope
 from mini_llm_gateway.errors import GatewayError
 from mini_llm_gateway.schemas.llm import LLMRequest
 from mini_llm_gateway.schemas.openai_compat import (
@@ -26,9 +27,13 @@ def _sse(payload: dict[str, Any]) -> str:
 
 
 @router.post("/v1/chat/completions", response_model=None)
-async def chat_completions(payload: ChatCompletionRequest, http: Request) -> JSONResponse | StreamingResponse:
-    # OpenAI Chat Completions 方言入口：请求规范化 → 内部领域模型 → 响应翻译。
+async def chat_completions(
+    payload: ChatCompletionRequest, http: Request, tenant: str | None = Depends(tenant_scope)
+) -> JSONResponse | StreamingResponse:
+    # OpenAI Chat Completions 方言入口：认证/限流依赖 → 请求规范化 → 内部领域模型 → 响应翻译。
     request: LLMRequest = normalize_chat_request(payload)
+    request.tenant_id = tenant
+    request.run_id = http.headers.get("X-Run-Id")  # 调用方业务链路标识，透录进 trace
     gateway = http.app.state.gateway
     if payload.stream:
         await gateway.validate_request(request)
@@ -45,6 +50,7 @@ async def chat_completions(payload: ChatCompletionRequest, http: Request) -> JSO
         content=response.content,
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
+        finish_reason=response.finish_reason,
     )
     return JSONResponse(body.model_dump(), headers={"X-Request-ID": response.request_id})
 
@@ -69,7 +75,15 @@ async def _chunk_stream(gateway: Any, request: LLMRequest) -> AsyncIterator[str]
                 first = False
             yield _sse({**chunk, "choices": [{"index": 0, "delta": delta, "finish_reason": None}]})
         elif event["type"] == "response.completed":
-            yield _sse({**chunk, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+            # finish_reason 透传：stop 之外还有 content_filter（安全拒答，ADR 0010）
+            yield _sse(
+                {
+                    **chunk,
+                    "choices": [
+                        {"index": 0, "delta": {}, "finish_reason": event.get("finish_reason", "stop")}
+                    ],
+                }
+            )
             # OpenAI 惯例：include_usage 时在 [DONE] 前附加一个 choices 为空的 usage chunk
             if event.get("usage") is not None:
                 usage_chunk = {

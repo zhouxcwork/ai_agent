@@ -31,13 +31,14 @@ uv run --extra dev pytest                             # 全量测试
 uv run --extra dev pytest tests/test_gateway.py -k fallback   # 聚焦单测
 uv run --env-file .env uvicorn mini_llm_gateway.app:create_app --factory --reload  # 本地启动
 docker compose up -d                                  # Docker 一键部署（SQLite 持久化在 ./data）
+uv run python evals/routing_report.py --db data/gateway.db    # 离线路由质量报告（--json 输出 JSON）
 ```
 
 ## 架构分层与边界（改动前必读）
 
 ```
 api/        路由层：OpenAI 方言（chat completions / responses）在此翻译，协议分离边界
-service/    编排层：gateway_service（fallback、trace）+ model_router（档位路由、熔断状态机）
+service/    编排层：gateway_service（fallback、trace）+ model_router（档位路由、熔断状态机）+ limiter（多级资源边界）
 provider/   供应商适配：AsyncOpenAI；API Key 只允许在这一层出现
 repository/ 持久化：aiosqlite，trace / prompt 模板 / responses 会话三张表
 schemas/    Pydantic 契约：内部领域模型 + openai_compat / responses_compat 方言模型
@@ -60,6 +61,9 @@ config.py   config.yaml → GatewayConfig
 - **trace 只追加**：endpoint 列区分来源（chat_completions/responses）；写库失败降级日志不影响主请求
 - **会话续接**：stored_responses 存展开后的完整输入，previous_response_id O(1) 重建（ADR 0006）；store=false 不入库
 - **管理鉴权**：模板写接口用 `X-Admin-Token` 头，token 环境变量名在 config.yaml `admin.token_env`
+- **错误码分段（ADR 0010）**：对外 code 一律 `<段>.<码>`（10 段：auth/request/prompt/route/resource/upstream/stream/output/content/platform）；段决定重试语义，新增错误码必须先归段
+- **认证与限流（ADR 0011）**：调用端点（chat/responses）走 Bearer 白名单（config `auth.api_keys`，apikey→tenantId，为空不启用）；租户 QPS 令牌桶 + 租户/路由目标并发（`供应商/模型` 粒度）全部 429 快速拒绝，不排队
+- **内容拒答不绕过**：finish_reason=content_filter 时不重试不换模型不计熔断，200 + finish_reason 透传，trace 记 refused 状态
 
 ## 注意事项
 
