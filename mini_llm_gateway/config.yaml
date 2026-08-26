@@ -54,3 +54,7 @@ modes:
 circuit_breaker:
   failure_threshold: 5
   cooldown_seconds: 30
+
+# 非流式结构化输出：解析失败先无损提取修复，仍失败重试上游（次），耗尽报明确错误
+structured_output:
+  max_retries: 2

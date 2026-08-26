@@ -5,7 +5,6 @@ from openai import BadRequestError, NotFoundError
 
 from tests.conftest import BACKUP_MODEL, PRIMARY_KEY, PRIMARY_MODEL
 
-pytestmark = pytest.mark.asyncio
 
 
 async def test_sdk_responses_create(sdk, fake_provider):

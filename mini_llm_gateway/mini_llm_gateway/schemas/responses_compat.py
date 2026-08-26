@@ -122,9 +122,7 @@ def normalize_responses_request(payload: ResponsesRequest) -> LLMRequest:
         response_schema = schema
     elif format_type == "json_object":
         response_schema = {"type": "object"}
-
-    if payload.stream and response_schema is not None:
-        raise GatewayError("unsupported_combination", "流式输出不支持结构化输出", 400)
+    # 流式与结构化已解禁（ADR 0008）：流中语法监控、流尾 Schema 裁决
 
     return LLMRequest(
         model=payload.model,

@@ -55,7 +55,8 @@ config.py   config.yaml → GatewayConfig
 - **密钥**：config.yaml 只写环境变量名（`api_key_env`），真实 Key 从 env/.env 注入；`mini_llm_gateway/.env` 已 gitignore，模板是 `.env.example`
 - **Prompt 模板版本不可变**：`(name, version)` 唯一，无 UPDATE/DELETE；"修改"= 创建新版本（见 docs/adr/0002）
 - **Jinja2 沙箱**：模板渲染必须用 SandboxedEnvironment（防 SSTI），StrictUndefined（缺变量报错）
-- **SSE 与结构化输出互斥**：流式入口在返回 StreamingResponse 前先做档位/模板预校验（validate_request，不推路由轮询计数）
+- **流式与结构化可组合（ADR 0008）**：流中语法监控（syntax_monitor）破损即断流，流尾完整 JSON 解析 + Schema 裁决；流式入口在返回 StreamingResponse 前先做档位/模板预校验（validate_request，不推路由轮询计数）
+- **输出修复边界（ADR 0009）**：非流式结构化失败先无损提取修复（repair.extract_json）→ 按 structured_output.max_retries 重试上游 → 耗尽报明确错误；内容类错误（invalid_json/schema_validation_failed）不回报熔断
 - **trace 只追加**：endpoint 列区分来源（chat_completions/responses）；写库失败降级日志不影响主请求
 - **会话续接**：stored_responses 存展开后的完整输入，previous_response_id O(1) 重建（ADR 0006）；store=false 不入库
 - **管理鉴权**：模板写接口用 `X-Admin-Token` 头，token 环境变量名在 config.yaml `admin.token_env`

@@ -22,5 +22,5 @@ class CallTrace(BaseModel):
     cost_usd: float = Field(ge=0)
     latency_ms: int = Field(ge=0)
     attempts: int = Field(ge=0)
-    status: Literal["success", "failed"]
+    status: Literal["success", "failed", "cancelled"]
     error_code: str | None = None

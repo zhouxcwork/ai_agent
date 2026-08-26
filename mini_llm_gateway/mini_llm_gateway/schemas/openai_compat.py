@@ -90,8 +90,7 @@ def normalize_chat_request(payload: ChatCompletionRequest) -> LLMRequest:
         messages.append(Message(role=role, content=message.content))
 
     response_schema = _extract_response_schema(payload.response_format)
-    if payload.stream and response_schema is not None:
-        raise GatewayError("unsupported_combination", "流式输出不支持结构化输出", 400)
+    # 流式与结构化已解禁（ADR 0008）：流中语法监控、流尾 Schema 裁决
 
     return LLMRequest(
         model=payload.model,

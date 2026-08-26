@@ -31,14 +31,14 @@ class OpenAICompatibleProvider:
             raise GatewayError("gateway_misconfigured", "Gateway 模型凭据未配置", 503)
         return AsyncOpenAI(api_key=api_key, base_url=target.base_url, max_retries=0)
 
-    async def complete(
-        self,
+    @staticmethod
+    def _build_request_data(
         target: ResolvedTarget,
         messages: list[Message],
         timeout_seconds: float,
         response_schema: dict[str, Any] | None,
-    ) -> tuple[str, Usage]:
-        # 将统一请求转换为 OpenAI Compatible 调用，隔离厂商协议差异。
+    ) -> dict[str, Any]:
+        # 统一构造请求体：结构化第一层保证（供应商模式或 schema 注入），流式/非流式共用。
         request_data: dict[str, Any] = {
             "model": target.provider_model,
             "messages": [message.model_dump() for message in messages],
@@ -67,6 +67,17 @@ class OpenAICompatibleProvider:
                     },
                     *request_data["messages"],
                 ]
+        return request_data
+
+    async def complete(
+        self,
+        target: ResolvedTarget,
+        messages: list[Message],
+        timeout_seconds: float,
+        response_schema: dict[str, Any] | None,
+    ) -> tuple[str, Usage]:
+        # 将统一请求转换为 OpenAI Compatible 调用，隔离厂商协议差异。
+        request_data = self._build_request_data(target, messages, timeout_seconds, response_schema)
         try:
             completion = await self.create_client(target).chat.completions.create(**request_data)
         except Exception as exc:
@@ -83,18 +94,23 @@ class OpenAICompatibleProvider:
         target: ResolvedTarget,
         messages: list[Message],
         timeout_seconds: float,
-    ) -> AsyncIterator[str]:
-        # 逐块读取上游响应，为 Gateway 的实时流式代理提供标准增量文本。
+        response_schema: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str | Usage]:
+        # 逐块读取上游响应；结构化流式同样走第一层保证（模式/schema 注入，
+        # 见 ADR 0008），并开启 include_usage 使末块携带真实 token 用量。
+        request_data = self._build_request_data(target, messages, timeout_seconds, response_schema)
+        request_data["stream"] = True
+        request_data["stream_options"] = {"include_usage": True}
         try:
-            response = await self.create_client(target).chat.completions.create(
-                model=target.provider_model,
-                messages=[message.model_dump() for message in messages],
-                stream=True,
-                timeout=timeout_seconds,
-            )
+            response = await self.create_client(target).chat.completions.create(**request_data)
             async for chunk in response:
                 choice = chunk.choices[0] if chunk.choices else None
                 if choice and choice.delta.content:
                     yield choice.delta.content
+                elif chunk.usage is not None:
+                    yield Usage(
+                        input_tokens=chunk.usage.prompt_tokens or 0,
+                        output_tokens=chunk.usage.completion_tokens or 0,
+                    )
         except Exception as exc:
             raise _translate_openai_error(exc) from exc

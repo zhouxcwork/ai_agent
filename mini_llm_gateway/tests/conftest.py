@@ -16,6 +16,7 @@ from mini_llm_gateway.config import (
     ProviderConfig,
     ResolvedTarget,
     RouteTarget,
+    StructuredOutputConfig,
 )
 from mini_llm_gateway.schemas.llm import Message, Usage
 
@@ -34,6 +35,7 @@ class FakeProvider:
         self.fail_models: set[str] = set()
         self.complete_calls: list[str] = []
         self.last_messages: list[Message] = []
+        self.stream_chunks: list[str] | None = None  # None 时用默认增量 ["你", "好"]
 
     async def complete(
         self,
@@ -53,15 +55,22 @@ class FakeProvider:
         target: ResolvedTarget,
         messages: list[Message],
         timeout_seconds: float,
-    ) -> AsyncIterator[str]:
+        response_schema: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str | Usage]:
         if target.provider_model in self.fail_models:
             raise TimeoutError(f"upstream {target.provider_model} timeout")
-        for delta in ["你", "好"]:
+        chunks = self.stream_chunks if self.stream_chunks is not None else ["你", "好"]
+        for delta in chunks:
             yield delta
+        yield Usage(input_tokens=10, output_tokens=5)  # 模拟 include_usage 末块
 
 
 def make_config(
-    database_path: str, *, failure_threshold: int = 5, cooldown_seconds: float = 30.0
+    database_path: str,
+    *,
+    failure_threshold: int = 5,
+    cooldown_seconds: float = 30.0,
+    structured_max_retries: int = 2,
 ) -> GatewayConfig:
     def target(provider: str, model: str, price_input: float) -> RouteTarget:
         return RouteTarget(
@@ -78,6 +87,7 @@ def make_config(
         circuit_breaker=CircuitBreakerConfig(
             failure_threshold=failure_threshold, cooldown_seconds=cooldown_seconds
         ),
+        structured_output=StructuredOutputConfig(max_retries=structured_max_retries),
         providers={
             "p1": ProviderConfig(base_url="http://p1.test", api_key_env="K1"),
             "p2": ProviderConfig(base_url="http://p2.test", api_key_env="K2"),
@@ -115,5 +125,6 @@ async def sdk(app):
 
     async with app.router.lifespan_context(app):
         http = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver")
-        yield AsyncOpenAI(api_key="dummy", base_url="http://testserver/v1", http_client=http)
+        # 关闭 SDK 自动重试：5xx 会被 SDK 默认重试 2 次，干扰网关重试行为的断言
+        yield AsyncOpenAI(api_key="dummy", base_url="http://testserver/v1", http_client=http, max_retries=0)
         await http.aclose()

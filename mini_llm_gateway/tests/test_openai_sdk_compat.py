@@ -120,9 +120,9 @@ async def test_sdk_chat_stream_chunks(sdk, fake_provider):
     chunks = [chunk async for chunk in stream]
     assert chunks[0].object == "chat.completion.chunk"
     assert chunks[0].choices[0].delta.role == "assistant"
-    text = "".join(c.choices[0].delta.content or "" for c in chunks)
+    text = "".join(c.choices[0].delta.content or "" for c in chunks if c.choices)
     assert text == "你好"
-    assert chunks[-1].choices[0].finish_reason == "stop"
+    assert [c for c in chunks if c.choices][-1].choices[0].finish_reason == "stop"
     assert {c.id for c in chunks} == {chunks[0].id}  # 全流 id 一致
     assert chunks[0].model == "fast"
     assert chunks[0].actual_model == PRIMARY_KEY
@@ -134,7 +134,7 @@ async def test_sdk_chat_stream_fallback_before_first_chunk(sdk, fake_provider):
         model="fast", messages=[{"role": "user", "content": "hi"}], stream=True
     )
     chunks = [chunk async for chunk in stream]
-    text = "".join(c.choices[0].delta.content or "" for c in chunks)
+    text = "".join(c.choices[0].delta.content or "" for c in chunks if c.choices)
     assert text == "你好"  # 首块前切换目标，调用方拿到完整文本
     assert chunks[0].actual_model == BACKUP_KEY
 
@@ -150,12 +150,14 @@ async def test_sdk_chat_stream_all_failed(sdk, fake_provider):
             pass
 
 
-async def test_sdk_chat_stream_rejects_response_format(sdk):
-    with pytest.raises(BadRequestError) as exc_info:
-        await sdk.chat.completions.create(
-            model="fast",
-            messages=[{"role": "user", "content": "hi"}],
-            stream=True,
-            response_format={"type": "json_object"},
-        )
-    assert exc_info.value.response.json()["error"]["code"] == "unsupported_combination"
+async def test_sdk_chat_stream_structured_now_allowed(sdk, fake_provider):
+    # 流式与结构化已解禁（ADR 0008）：不再 400
+    fake_provider.stream_chunks = ['{"a": ', "42}"]
+    stream = await sdk.chat.completions.create(
+        model="fast",
+        messages=[{"role": "user", "content": "hi"}],
+        stream=True,
+        response_format={"type": "json_object"},
+    )
+    chunks = [c async for c in stream]
+    assert [c for c in chunks if c.choices][-1].choices[0].finish_reason == "stop"

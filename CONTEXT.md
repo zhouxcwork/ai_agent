@@ -73,8 +73,16 @@ _Avoid_: 上下文缓存、历史记录
 _Avoid_: 日志、usage
 
 **结构化输出**:
-调用方声明 JSON Schema，Gateway 保证返回内容通过该 Schema 校验的输出方式；与流式互斥。
+调用方声明 JSON Schema，Gateway 保证返回内容通过该 Schema 校验的输出方式；流式场景的 Schema 裁决只在流尾发生。
 _Avoid_: JSON 模式
+
+**语法监控（Syntax Monitor）**:
+Structured Streaming 流中逐增量推进的轻量 JSON 语法检查（括号平衡与字符串状态），只负责尽早发现破损并断流，不做 Schema 判定。
+_Avoid_: 流式校验、增量解析器
+
+**输出修复（Output Repair）**:
+非流式结构化失败后的有界挽救链：无损提取（markdown 包裹/杂文本截取）→ 有限次上游重试 → 明确报错；内容失败不计入熔断。
+_Avoid_: 重试循环、容错
 
 **管理令牌**:
 模板写操作所需的静态凭证，从环境变量注入；与调用方身份无关。

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Message(BaseModel):
@@ -32,12 +32,7 @@ class LLMRequest(BaseModel):
     response_schema: dict[str, Any] | None = None
     timeout_seconds: float = Field(default=30, gt=0, le=120)
     prompt: PromptSelection | None = None
-
-    @model_validator(mode="after")
-    def check_supported_combination(self) -> LLMRequest:
-        if self.stream and self.response_schema is not None:
-            raise ValueError("stream 与 response_schema 不能同时使用")
-        return self
+    # 流式与结构化组合已解禁（ADR 0008）：流中语法监控、流尾 Schema 裁决
 
 
 class Usage(BaseModel):

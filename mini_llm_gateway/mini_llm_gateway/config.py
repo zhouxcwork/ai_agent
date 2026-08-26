@@ -47,10 +47,16 @@ class CircuitBreakerConfig(BaseModel):
     cooldown_seconds: float = Field(default=30, ge=0)
 
 
+class StructuredOutputConfig(BaseModel):
+    # 非流式结构化失败的修复重试边界（ADR 0009）：无损提取修复内置，此处只管上游重试次数。
+    max_retries: int = Field(default=2, ge=0, le=5)
+
+
 class GatewayConfig(BaseModel):
     database: DatabaseConfig = DatabaseConfig()
     admin: AdminConfig = AdminConfig()
     circuit_breaker: CircuitBreakerConfig = CircuitBreakerConfig()
+    structured_output: StructuredOutputConfig = StructuredOutputConfig()
     providers: dict[str, ProviderConfig]
     modes: dict[str, ModeConfig]
 

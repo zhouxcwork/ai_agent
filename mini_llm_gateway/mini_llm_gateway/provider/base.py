@@ -14,6 +14,8 @@ class RetryableUpstreamError(Exception):
 
 class Provider(Protocol):
     # 规定供应商 Adapter 的统一接口，业务流程不依赖具体 SDK。
+    # stream 末尾 yield 一个 Usage 对象（上游 include_usage 的末块用量）。
+
     async def complete(
         self,
         target: ResolvedTarget,
@@ -27,4 +29,5 @@ class Provider(Protocol):
         target: ResolvedTarget,
         messages: list[Message],
         timeout_seconds: float,
-    ) -> AsyncIterator[str]: ...
+        response_schema: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str | Usage]: ...

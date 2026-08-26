@@ -84,9 +84,11 @@ async def _event_stream(
     # 无 [DONE]（Responses 协议无此标记）；completed 携带完整 response 对象。
     created_at = int(time.time())
     text_parts: list[str] = []
-    stream_state: dict[str, Any] = {"request_id": "", "model": None}
+    stream_state: dict[str, Any] = {"request_id": "", "model": None, "usage": None}
 
     def response_skeleton(status: str, output_text: str = "", error: dict[str, Any] | None = None) -> dict[str, Any]:
+        usage = stream_state.get("usage") or {"input_tokens": 0, "output_tokens": 0}
+        total = usage["input_tokens"] + usage["output_tokens"]
         body: dict[str, Any] = {
             "id": f"resp-{stream_state['request_id']}",
             "object": "response",
@@ -105,7 +107,7 @@ async def _event_stream(
                     "content": [{"type": "output_text", "text": output_text, "annotations": []}],
                 }
             ],
-            "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+            "usage": {"input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"], "total_tokens": total},
         }
         if error is not None:
             body["error"] = error
@@ -133,15 +135,17 @@ async def _event_stream(
                 yield _sse({"type": "response.created", "response": response_skeleton("in_progress")})
             output_text = "".join(text_parts)
             stream_state["model"] = event.get("model", stream_state["model"])
+            stream_state["usage"] = event.get("usage")
             if store:
+                usage = event.get("usage") or {"input_tokens": 0, "output_tokens": 0}
                 await repo.store(
                     StoredResponse(
                         id=f"resp-{stream_state['request_id']}",
                         requested_model=request.model,
                         input_messages=full_messages,
                         output_text=output_text,
-                        input_tokens=0,
-                        output_tokens=0,
+                        input_tokens=usage["input_tokens"],
+                        output_tokens=usage["output_tokens"],
                         created_at=ResponseRepository.now_iso(),
                     )
                 )

@@ -84,6 +84,14 @@ first = client.responses.create(model="smart", input="第一轮")
 second = client.responses.create(model="smart", input="第二轮", previous_response_id=first.id)
 ```
 
+## 结构化输出：两层保证 + 修复边界 + 流式裁决
+
+- **两层保证**：请求时声明 JSON Schema（第一层：供应商结构化模式 / schema 注入）；返回后本地 Schema 校验（第二层）
+- **修复边界（非流式）**：输出被 markdown 包裹或夹杂杂文本时先无损提取修复；仍失败按 `structured_output.max_retries`（默认 2）重试上游；耗尽返回明确错误码，绝不静默；内容类错误不计熔断
+- **Structured Streaming**：`stream=true` 与 `response_format` 可组合——流中轻量语法监控（破损立即断流省 token），流尾完整 JSON 解析 + Schema 裁决，失败发流内错误事件
+- **流式 usage**：上游开启 include_usage，chat 末尾 usage chunk 与 responses 的 completed 事件携带真实 token，trace 记真实成本
+- **取消终态**：客户端断连记独立 `cancelled` trace 状态（`error_code=client_cancelled`），可用性统计不被用户取消污染
+
 ## 模板治理规则
 
 - `(name, version)` 唯一且**不可变**：页面"修改"= 创建新版本，历史版本永久保留、可回滚

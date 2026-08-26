@@ -20,10 +20,15 @@ from mini_llm_gateway.repository.trace_repository import TraceRepository
 from mini_llm_gateway.schemas.llm import LLMRequest, LLMResponse, Message, Usage
 from mini_llm_gateway.schemas.trace import CallTrace
 from mini_llm_gateway.service.model_router import ModelRouter
+from mini_llm_gateway.service.repair import extract_json
+from mini_llm_gateway.service.syntax_monitor import JsonSyntaxBroken, JsonSyntaxMonitor
 
 logger = logging.getLogger("llm_gateway")
 
 ATTEMPTS_PER_TARGET = 2
+
+# 内容类错误码：不回报熔断（ADR 0009）
+_CONTENT_ERROR_CODES = {"invalid_json", "schema_validation_failed"}
 
 
 def is_retryable(exc: Exception) -> bool:
@@ -131,13 +136,35 @@ class GatewayService:
                     )
                     parsed: dict[str, Any] | list[Any] | None = None
                     if request.response_schema is not None:
-                        try:
-                            parsed = json.loads(content)
-                            validate(instance=parsed, schema=request.response_schema)
-                        except json.JSONDecodeError as exc:
-                            raise GatewayError("invalid_json", "模型没有返回合法 JSON") from exc
-                        except JsonSchemaError as exc:
-                            raise GatewayError("schema_validation_failed", "模型结果不符合 response_schema") from exc
+                        # 修复链（ADR 0009）：先原始解析，失败做无损提取修复；
+                        # 仍失败按 max_retries 重试上游（同目标），耗尽返回明确错误。
+                        last_code = "invalid_json"
+                        for structured_attempt in range(1 + self.config.structured_output.max_retries):
+                            if structured_attempt > 0:
+                                attempts += 1
+                                content, usage = await self.provider.complete(
+                                    target, messages, request.timeout_seconds, request.response_schema
+                                )
+                            parsed, content, last_code = self._parse_with_repair(
+                                content, request.response_schema
+                            )
+                            if last_code is None:
+                                break
+                        if last_code is not None:
+                            message = (
+                                "模型没有返回合法 JSON"
+                                if last_code == "invalid_json"
+                                else "模型结果不符合 response_schema"
+                            )
+                            await self.record_trace(
+                                request_id, requested_model, None,
+                                request.prompt.name if request.prompt else None,
+                                request.prompt.version if request.prompt else None,
+                                Usage(input_tokens=0, output_tokens=0),
+                                int((time.perf_counter() - started) * 1000), attempts,
+                                "failed", last_code, endpoint=endpoint,
+                            )
+                            raise GatewayError(last_code, message)
                     self.router.record_success(target.key)
                     response = LLMResponse(
                         request_id=request_id,
@@ -162,9 +189,11 @@ class GatewayService:
                         endpoint=endpoint,
                     )
                     return response
-                except GatewayError:
-                    # 内容/配置类错误：重试与切换目标都无意义，直接失败。
-                    self.router.record_failure(target.key)
+                except GatewayError as exc:
+                    # 内容类错误不回报熔断（ADR 0009：JSON 质量不是目标健康问题）；
+                    # 配置类（如密钥缺失）代表目标不可用，仍计入熔断。
+                    if exc.code not in _CONTENT_ERROR_CODES:
+                        self.router.record_failure(target.key)
                     raise
                 except Exception as exc:
                     last_error = exc
@@ -191,63 +220,149 @@ class GatewayService:
             "model_unavailable", f"档位 {requested_model} 的全部路由目标均不可用"
         ) from last_error
 
+    @staticmethod
+    def _parse_with_repair(
+        content: str, response_schema: dict[str, Any]
+    ) -> tuple[dict[str, Any] | list[Any] | None, str, str | None]:
+        # 原文与无损提取各试一次：返回 (parsed, 生效的 content, None) 或 (None, 原文, 错误码)
+        last_code = "invalid_json"
+        for candidate in (content, extract_json(content)):
+            try:
+                parsed = json.loads(candidate)
+                validate(instance=parsed, schema=response_schema)
+                return parsed, candidate, None
+            except json.JSONDecodeError:
+                last_code = "invalid_json"
+            except JsonSchemaError:
+                last_code = "schema_validation_failed"
+        return None, content, last_code
+
     async def stream(self, request: LLMRequest, endpoint: str = "chat_completions") -> AsyncIterator[dict[str, Any]]:
         # 流式领域事件（协议无关）：content.delta / response.completed / response.failed。
         # 上游首块前可切换候选目标；首块后仅发流内错误，避免文本重复。
+        # 结构化流式（ADR 0008）：流中语法监控破损即断流，流尾做完整 JSON 解析 + Schema 裁决。
+        # 流式 usage（决策 16）：上游 include_usage 末块并入 completed 事件与 trace。
+        # 取消终态（决策 17）：客户端断连以 cancelled 状态留痕后继续传播取消。
         messages = await self.build_messages(request)
         started = time.perf_counter()
         attempts = 0
         emitted = False
         last_error: Exception | None = None
         request_id = str(uuid.uuid4())
+        structured = request.response_schema is not None
+        stream_usage = Usage(input_tokens=0, output_tokens=0)
+        last_target: ResolvedTarget | None = None
+        completed = False
+
+        def prompt_meta() -> tuple[str | None, str | None]:
+            return (
+                request.prompt.name if request.prompt else None,
+                request.prompt.version if request.prompt else None,
+            )
+
+        def failed_event(code: str) -> dict[str, Any]:
+            return {"type": "response.failed", "error": code, "request_id": request_id}
+
+        async def record_failed(code: str) -> None:
+            prompt_name, prompt_version = prompt_meta()
+            await self.record_trace(
+                request_id, request.model, None, prompt_name, prompt_version, stream_usage,
+                int((time.perf_counter() - started) * 1000), attempts, "failed", code, endpoint=endpoint,
+            )
+
         try:
-            candidates = self.resolve_candidates(request)
-        except GatewayError as exc:
-            # 预检与选路之间目标全部熔断等竞态：以流内失败事件收尾。
-            yield {"type": "response.failed", "error": exc.code, "request_id": request_id}
-            return
-        for target in candidates:
             try:
-                attempts += 1
-                async for delta in self.provider.stream(target, messages, request.timeout_seconds):
-                    emitted = True
-                    yield {"type": "content.delta", "delta": delta, "model": target.key, "request_id": request_id}
-                self.router.record_success(target.key)
-                await self.record_trace(
-                    request_id,
-                    request.model,
-                    target.key,
-                    request.prompt.name if request.prompt else None,
-                    request.prompt.version if request.prompt else None,
-                    Usage(input_tokens=0, output_tokens=0),
-                    int((time.perf_counter() - started) * 1000),
-                    attempts,
-                    "success",
-                    target=target,
-                    cost_usd=0.0,
-                    endpoint=endpoint,
-                )
-                yield {"type": "response.completed", "model": target.key, "request_id": request_id}
+                candidates = self.resolve_candidates(request)
+            except GatewayError as exc:
+                # 预检与选路之间目标全部熔断等竞态：以流内失败事件收尾。
+                yield failed_event(exc.code)
                 return
-            except Exception as exc:
-                last_error = exc
-                self.router.record_failure(target.key)
-                if emitted:
-                    break
-                # 首块前失败（无论是否可重试）都切换下一健康候选，与非流式行为一致
-                continue
-        logger.exception("upstream stream failed", exc_info=last_error)
-        await self.record_trace(
-            request_id,
-            request.model,
-            None,
-            request.prompt.name if request.prompt else None,
-            request.prompt.version if request.prompt else None,
-            Usage(input_tokens=0, output_tokens=0),
-            int((time.perf_counter() - started) * 1000),
-            attempts,
-            "failed",
-            "upstream_stream_failed",
-            endpoint=endpoint,
-        )
-        yield {"type": "response.failed", "error": "upstream_stream_failed", "request_id": request_id}
+            for target in candidates:
+                monitor = JsonSyntaxMonitor() if structured else None
+                collected: list[str] = []  # 结构化时收集增量做流尾终审
+                last_target = target
+                try:
+                    attempts += 1
+                    async for item in self.provider.stream(
+                        target, messages, request.timeout_seconds, request.response_schema
+                    ):
+                        if isinstance(item, Usage):
+                            stream_usage = item  # 上游 include_usage 末块
+                            continue
+                        delta = item
+                        emitted = True
+                        if monitor is not None:
+                            try:
+                                monitor.feed(delta)
+                            except JsonSyntaxBroken:
+                                # 语法破损：立即断流（return 关闭上游生成器），省 token 快速失败
+                                await record_failed("invalid_json")
+                                yield failed_event("invalid_json")
+                                return
+                            collected.append(delta)
+                        yield {"type": "content.delta", "delta": delta, "model": target.key, "request_id": request_id}
+                    if structured:
+                        code = self._final_validate("".join(collected), request.response_schema)
+                        if code is not None:
+                            await record_failed(code)
+                            yield failed_event(code)
+                            return
+                    self.router.record_success(target.key)
+                    prompt_name, prompt_version = prompt_meta()
+                    await self.record_trace(
+                        request_id, request.model, target.key, prompt_name, prompt_version, stream_usage,
+                        int((time.perf_counter() - started) * 1000), attempts,
+                        "success", target=target, endpoint=endpoint,
+                    )
+                    completed = True
+                    yield {
+                        "type": "response.completed",
+                        "model": target.key,
+                        "request_id": request_id,
+                        "usage": {
+                            "input_tokens": stream_usage.input_tokens,
+                            "output_tokens": stream_usage.output_tokens,
+                        },
+                    }
+                    return
+                except Exception as exc:
+                    last_error = exc
+                    self.router.record_failure(target.key)
+                    if emitted:
+                        break
+                    # 首块前失败（无论是否可重试）都切换下一健康候选，与非流式行为一致
+                    continue
+            logger.exception("upstream stream failed", exc_info=last_error)
+            await record_failed("upstream_stream_failed")
+            yield failed_event("upstream_stream_failed")
+        except (asyncio.CancelledError, GeneratorExit):
+            # 客户端断连/任务取消：cancelled 终态留痕（trace 失败只降级日志），再传播取消
+            if not completed:
+                try:
+                    prompt_name, prompt_version = prompt_meta()
+                    await asyncio.shield(
+                        self.record_trace(
+                            request_id, request.model,
+                            last_target.key if last_target else None,
+                            prompt_name, prompt_version, stream_usage,
+                            int((time.perf_counter() - started) * 1000), attempts,
+                            "cancelled", "client_cancelled",
+                            target=last_target, endpoint=endpoint,
+                        )
+                    )
+                except Exception:
+                    logger.exception("cancelled trace 写入失败 request_id=%s", request_id)
+            raise
+
+    @staticmethod
+    def _final_validate(content: str, response_schema: dict[str, Any] | None) -> str | None:
+        # 流尾结构化终审：合法返回 None，否则返回错误码
+        try:
+            parsed = json.loads(content)
+            if response_schema is not None:
+                validate(instance=parsed, schema=response_schema)
+            return None
+        except json.JSONDecodeError:
+            return "invalid_json"
+        except JsonSchemaError:
+            return "schema_validation_failed"

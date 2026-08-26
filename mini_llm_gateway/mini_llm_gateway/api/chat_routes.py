@@ -70,6 +70,21 @@ async def _chunk_stream(gateway: Any, request: LLMRequest) -> AsyncIterator[str]
             yield _sse({**chunk, "choices": [{"index": 0, "delta": delta, "finish_reason": None}]})
         elif event["type"] == "response.completed":
             yield _sse({**chunk, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+            # OpenAI 惯例：include_usage 时在 [DONE] 前附加一个 choices 为空的 usage chunk
+            if event.get("usage") is not None:
+                usage_chunk = {
+                    "id": chunk["id"],
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": request.model,
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": event["usage"]["input_tokens"],
+                        "completion_tokens": event["usage"]["output_tokens"],
+                        "total_tokens": event["usage"]["input_tokens"] + event["usage"]["output_tokens"],
+                    },
+                }
+                yield _sse(usage_chunk)
             yield "data: [DONE]\n\n"
         elif event["type"] == "response.failed":
             # OpenAI 惯例：中途错误只发 error 事件，不追加 [DONE]
