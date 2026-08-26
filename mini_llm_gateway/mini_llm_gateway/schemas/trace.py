@@ -12,6 +12,7 @@ class CallTrace(BaseModel):
 
     request_id: str
     timestamp: datetime
+    endpoint: str = "chat_completions"  # 调用来源端点：chat_completions / responses
     requested_model: str
     actual_model: str | None = None
     prompt_name: str | None = None

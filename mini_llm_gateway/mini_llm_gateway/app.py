@@ -5,17 +5,20 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 
 from mini_llm_gateway import __version__
-from mini_llm_gateway.api import llm_routes, prompt_routes, trace_routes
+from mini_llm_gateway.api import chat_routes, model_routes, prompt_routes, responses_routes, trace_routes
 from mini_llm_gateway.config import GatewayConfig, load_config
-from mini_llm_gateway.errors import GatewayError, gateway_error_handler
+from mini_llm_gateway.errors import GatewayError, gateway_error_handler, validation_error_handler
 from mini_llm_gateway.provider.openai_compatible import OpenAICompatibleProvider
 from mini_llm_gateway.provider.base import Provider
 from mini_llm_gateway.repository.prompt_repository import PromptRepository
+from mini_llm_gateway.repository.response_repository import ResponseRepository
 from mini_llm_gateway.repository.trace_repository import TraceRepository
 from mini_llm_gateway.schemas.prompt import PromptTemplateCreate
 from mini_llm_gateway.service.gateway_service import GatewayService
+from mini_llm_gateway.service.model_router import ModelRouter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("llm_gateway")
@@ -45,21 +48,28 @@ def create_app(config: GatewayConfig | None = None, provider: Provider | None = 
     async def lifespan(app: FastAPI):
         prompts = PromptRepository(gateway_config.database.path)
         traces = TraceRepository(gateway_config.database.path)
+        responses = ResponseRepository(gateway_config.database.path)
         await prompts.initialize()
         await traces.initialize()
+        await responses.initialize()
         await seed_prompt_templates(prompts)
 
         app.state.config = gateway_config
         app.state.prompts = prompts
         app.state.traces = traces
+        app.state.responses = responses
+        app.state.router = ModelRouter(gateway_config)
         app.state.gateway = GatewayService(
-            gateway_config, provider or OpenAICompatibleProvider(), prompts, traces
+            gateway_config, app.state.router, provider or OpenAICompatibleProvider(), prompts, traces
         )
         yield
 
     app = FastAPI(title="Mini LLM Gateway", version=__version__, lifespan=lifespan)
     app.add_exception_handler(GatewayError, gateway_error_handler)
-    app.include_router(llm_routes.router)
+    app.add_exception_handler(RequestValidationError, validation_error_handler)
+    app.include_router(chat_routes.router)
+    app.include_router(model_routes.router)
+    app.include_router(responses_routes.router)
     app.include_router(trace_routes.router)
     app.include_router(prompt_routes.router)
 

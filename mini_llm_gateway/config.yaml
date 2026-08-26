@@ -1,5 +1,5 @@
-# Mini LLM Gateway 配置：数据库、模型映射（含价格）、管理接口令牌
-# API Key 只在此处声明环境变量名，真实值从环境变量 / .env 注入
+# Mini LLM Gateway 配置：数据库、供应商、档位路由（含权重/能力/价格）、熔断参数
+# API Key 只声明环境变量名，真实值从环境变量 / .env 注入
 
 database:
   path: data/gateway.db
@@ -7,25 +7,50 @@ database:
 admin:
   token_env: GATEWAY_ADMIN_TOKEN
 
-# 主模型不可用时的能力等价备用模型
-fallback_model: general-backup
-
-models:
-  general-primary:
-    provider_model: deepseek-v4-flash
+providers:
+  openai:
+    base_url: https://api.openai.com
+    api_key_env: OPENAI_API_KEY
+    enabled: true
+  deepseek:
     base_url: https://api.deepseek.com
     api_key_env: DEEPSEEK_API_KEY
-    supports_structured_output: true
-    structured_output_mode: json_object   # json_schema | json_object
-    price_per_million:                    # 美元 / 1M tokens
-      input: 1.0
-      output: 4.0
-  general-backup:
-    provider_model: deepseek-chat
-    base_url: https://api.deepseek.com
-    api_key_env: DEEPSEEK_BACKUP_API_KEY
-    supports_structured_output: true
-    structured_output_mode: json_object
-    price_per_million:
-      input: 0.8
-      output: 3.2
+    enabled: true
+
+# 档位：model 字段唯一合法取值；候选按权重轮询选主选，失败按剩余健康候选 fallback
+modes:
+  fast:
+    strategy: weighted_round_robin
+    targets:
+      - provider: deepseek
+        model: deepseek-chat
+        weight: 3
+        supports_structured_output: true
+        structured_output_mode: json_object
+        price_per_million: {input: 0.28, output: 0.42}   # 美元 / 1M tokens
+      - provider: openai
+        model: gpt-5-mini
+        weight: 1
+        supports_structured_output: true
+        structured_output_mode: json_schema
+        price_per_million: {input: 0.25, output: 2.0}
+  smart:
+    strategy: weighted_round_robin
+    targets:
+      - provider: openai
+        model: gpt-5.2
+        weight: 2
+        supports_structured_output: true
+        structured_output_mode: json_schema
+        price_per_million: {input: 1.75, output: 14.0}
+      - provider: deepseek
+        model: deepseek-reasoner
+        weight: 1
+        supports_structured_output: true
+        structured_output_mode: json_object
+        price_per_million: {input: 0.55, output: 2.19}
+
+# 熔断：连续失败达阈值熔断；冷却期满半开试探一次，成功恢复、失败重熔断
+circuit_breaker:
+  failure_threshold: 5
+  cooldown_seconds: 30

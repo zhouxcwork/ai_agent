@@ -4,7 +4,7 @@ from mini_llm_gateway.repository.database import connect
 from mini_llm_gateway.schemas.trace import CallTrace
 
 _COLUMNS = (
-    "request_id, timestamp, requested_model, actual_model, prompt_name, prompt_version, "
+    "request_id, timestamp, endpoint, requested_model, actual_model, prompt_name, prompt_version, "
     "input_tokens, output_tokens, cost_usd, latency_ms, attempts, status, error_code"
 )
 
@@ -21,6 +21,7 @@ class TraceRepository:
                 CREATE TABLE IF NOT EXISTS llm_call_traces (
                     request_id TEXT PRIMARY KEY,
                     timestamp TEXT NOT NULL,
+                    endpoint TEXT NOT NULL DEFAULT 'llm',
                     requested_model TEXT NOT NULL,
                     actual_model TEXT,
                     prompt_name TEXT,
@@ -43,10 +44,11 @@ class TraceRepository:
     async def insert(self, trace: CallTrace) -> None:
         async with connect(self.database_path) as db:
             await db.execute(
-                f"INSERT INTO llm_call_traces ({_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                f"INSERT INTO llm_call_traces ({_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     trace.request_id,
                     trace.timestamp.isoformat(),
+                    trace.endpoint,
                     trace.requested_model,
                     trace.actual_model,
                     trace.prompt_name,
