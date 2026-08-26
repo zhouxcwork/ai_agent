@@ -6,7 +6,7 @@ OpenAI 协议兼容的 LLM 网关：档位路由（fast/smart）、多供应商�
 
 ```
 api/        HTTP 路由层：协议方言（chat completions / responses）在此翻译，不含业务逻辑
-service/    业务编排层：gateway_service（编排）、model_router（档位路由 + 熔断状态机）
+service/    业务编排层：gateway_service（编排）、model_router（档位路由 + 熔断状态机）、limiter（多级资源边界）、repair / syntax_monitor（结构化输出修复与流中语法监控）
 provider/   供应商适配层：OpenAI Compatible（AsyncOpenAI），密钥只在这一层出现
 repository/ 持久化层：aiosqlite，trace / prompt 模板 / responses 会话三张表
 schemas/    Pydantic 契约：内部领域模型 + OpenAI 方言入参出参（openai_compat / responses_compat）
@@ -43,6 +43,7 @@ cp .env.example .env && docker compose up -d   # SQLite 持久化在 ./data
 | GET/POST | `/v1/prompts` | 模板列表 / 创建新版本（写需 `X-Admin-Token`） |
 | POST | `/v1/prompts/{name}/{version}/render` | 渲染预览 |
 | GET | `/admin` | 模板管理页面 |
+| GET | `/healthz` | 健康检查（docker-compose healthcheck 使用，不进 /docs） |
 
 错误统一 OpenAI 格式：`{"error": {"message", "type", "param", "code"}}`；**code 为点分分段码 `<段>.<码>`**（ADR 0010），段决定重试语义：
 
