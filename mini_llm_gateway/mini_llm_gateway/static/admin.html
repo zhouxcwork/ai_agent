@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini LLM Gateway · 模板管理</title>
+<style>
+  :root { --border: #d9dee5; --bg: #f5f7fa; --accent: #2563eb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: #1f2937; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: #fff; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; margin-right: auto; }
+  input, textarea, button { font: inherit; }
+  input[type=text], input[type=password], textarea { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; background: #fff; }
+  textarea { width: 100%; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  button { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+  button.secondary { background: #fff; color: var(--accent); }
+  main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+  .panel { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; color: #6b7280; font-weight: 600; }
+  .tpl-group { margin-bottom: 12px; }
+  .tpl-group .name { font-weight: 600; }
+  .tpl-versions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .version-chip { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); background: #fff; cursor: pointer; }
+  .version-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .meta { color: #6b7280; font-size: 12px; margin-bottom: 8px; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .row input { flex: 1; }
+  #message { padding: 6px 10px; border-radius: 6px; margin-bottom: 10px; display: none; font-size: 13px; }
+  #message.ok { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  #message.err { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; white-space: pre-wrap; }
+  .actions { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
+  label { font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px; }
+  #render-result { background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 10px; white-space: pre-wrap; max-height: 260px; overflow: auto; font-size: 12px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mini LLM Gateway · Prompt 模板管理</h1>
+  <input type="password" id="token" placeholder="X-Admin-Token（写操作需要）" style="width: 240px">
+  <button class="secondary" onclick="loadTemplates()">刷新列表</button>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>模板列表</h2>
+    <div id="template-list">加载中…</div>
+  </section>
+
+  <section class="panel">
+    <div id="message"></div>
+
+    <h2>查看版本</h2>
+    <div class="meta" id="view-meta">选择左侧版本查看</div>
+    <textarea id="view-content" rows="10" readonly placeholder="模板正文（版本不可变，只能新建版本）"></textarea>
+    <div class="actions">
+      <button class="secondary" onclick="fillEditorFromView()">基于此版本新建</button>
+    </div>
+    <label>渲染测试变量（JSON，缺变量会报错，开关变量传空串表示关闭）</label>
+    <textarea id="render-vars" rows="4" placeholder='{"language": "python", "source_code": "print(1)"}'></textarea>
+    <div class="actions"><button class="secondary" onclick="renderTest()">渲染预览</button></div>
+    <div id="render-result"></div>
+
+    <h2 style="margin-top: 20px">创建模板 / 新版本</h2>
+    <div class="row">
+      <div style="flex: 1"><label>名称</label><input type="text" id="new-name" placeholder="agent_code_reviewer"></div>
+      <div style="flex: 1"><label>版本（不可变，重复会被拒绝）</label><input type="text" id="new-version" placeholder="v2"></div>
+    </div>
+    <label>模板正文（Jinja2）</label>
+    <textarea id="new-content" rows="10" placeholder="你是 {{ product_name }} 的助手……"></textarea>
+    <div class="actions"><button onclick="createTemplate()">保存新版本</button></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let current = null; // {name, version}
+
+// ---------- 工具 ----------
+function showMessage(text, ok) {
+  const el = $("message");
+  el.className = ok ? "ok" : "err";
+  el.textContent = text;
+}
+function clearMessage() { $("message").className = ""; }
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message ? `${body.code || res.status}: ${body.message}` : `HTTP ${res.status}`);
+  return body;
+}
+function bumpVersion(version) {
+  const m = /^v(\d+)$/.exec(version);
+  return m ? `v${Number(m[1]) + 1}` : `${version}-next`;
+}
+
+// ---------- 模板列表 ----------
+async function loadTemplates() {
+  try {
+    const records = await api("/v1/prompts");
+    const groups = {};
+    for (const r of records) (groups[r.name] ??= []).push(r);
+    const box = $("template-list");
+    box.innerHTML = Object.keys(groups).length ? "" : "<div class='meta'>暂无模板</div>";
+    for (const [name, versions] of Object.entries(groups)) {
+      const div = document.createElement("div");
+      div.className = "tpl-group";
+      div.innerHTML = `<div class="name">${name}</div><div class="tpl-versions">` +
+        versions
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))
+          .map((v) => `<span class="version-chip" data-name="${name}" data-version="${v.version}" onclick="selectVersion('${name}', '${v.version}')">${v.version}</span>`)
+          .join("") + "</div>";
+      box.appendChild(div);
+    }
+    if (current) markActive();
+  } catch (e) { showMessage("加载失败：" + e.message, false); }
+}
+function markActive() {
+  document.querySelectorAll(".version-chip").forEach((c) =>
+    c.classList.toggle("active", c.dataset.name === current?.name && c.dataset.version === current?.version));
+}
+
+// ---------- 查看与渲染 ----------
+async function selectVersion(name, version) {
+  try {
+    const r = await api(`/v1/prompts/${encodeURIComponent(name)}/${encodeURIComponent(version)}`);
+    current = { name, version };
+    $("view-meta").textContent = `${name} / ${version} · 创建于 ${r.created_at}`;
+    $("view-content").value = r.system_template;
+    markActive(); clearMessage(); $("render-result").style.display = "none";
+  } catch (e) { showMessage("加载失败：" + e.message, false); }
+}
+async function renderTest() {
+  if (!current) return showMessage("请先选择一个版本", false);
+  const out = $("render-result");
+  try {
+    const vars = $("render-vars").value.trim() ? JSON.parse($("render-vars").value) : {};
+    const r = await api(`/v1/prompts/${encodeURIComponent(current.name)}/${encodeURIComponent(current.version)}/render`, {
+      method: "POST", body: JSON.stringify({ variables: vars }),
+    });
+    out.style.display = "block"; out.textContent = r.content;
+    showMessage("渲染成功", true);
+  } catch (e) {
+    out.style.display = "none";
+    showMessage("渲染失败：" + e.message, false);
+  }
+}
+
+// ---------- 创建 / 新版本 ----------
+function fillEditorFromView() {
+  if (!current) return showMessage("请先选择一个版本", false);
+  $("new-name").value = current.name;
+  $("new-version").value = bumpVersion(current.version);
+  $("new-content").value = $("view-content").value;
+  showMessage("已填入编辑区，修改后保存为新版本", true);
+}
+async function createTemplate() {
+  const token = $("token").value.trim();
+  if (!token) return showMessage("请先在右上角填写 X-Admin-Token", false);
+  const payload = {
+    name: $("new-name").value.trim(),
+    version: $("new-version").value.trim(),
+    system_template: $("new-content").value,
+  };
+  if (!payload.name || !payload.version || !payload.system_template) return showMessage("名称、版本、正文都不能为空", false);
+  try {
+    await api("/v1/prompts", { method: "POST", body: JSON.stringify(payload), headers: { "X-Admin-Token": token } });
+    showMessage(`已保存 ${payload.name}/${payload.version}`, true);
+    await loadTemplates();
+    await selectVersion(payload.name, payload.version);
+  } catch (e) { showMessage("保存失败：" + e.message, false); }
+}
+
+// ---------- 初始化 ----------
+$("token").value = localStorage.getItem("gateway_admin_token") || "";
+$("token").addEventListener("change", () => localStorage.setItem("gateway_admin_token", $("token").value.trim()));
+loadTemplates();
+</script>
+</body>
+</html>

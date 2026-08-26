@@ -1,0 +1,31 @@
+# Mini LLM Gateway 配置：数据库、模型映射（含价格）、管理接口令牌
+# API Key 只在此处声明环境变量名，真实值从环境变量 / .env 注入
+
+database:
+  path: data/gateway.db
+
+admin:
+  token_env: GATEWAY_ADMIN_TOKEN
+
+# 主模型不可用时的能力等价备用模型
+fallback_model: general-backup
+
+models:
+  general-primary:
+    provider_model: deepseek-v4-flash
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+    supports_structured_output: true
+    structured_output_mode: json_object   # json_schema | json_object
+    price_per_million:                    # 美元 / 1M tokens
+      input: 1.0
+      output: 4.0
+  general-backup:
+    provider_model: deepseek-chat
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_BACKUP_API_KEY
+    supports_structured_output: true
+    structured_output_mode: json_object
+    price_per_million:
+      input: 0.8
+      output: 3.2

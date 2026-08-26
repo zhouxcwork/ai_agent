@@ -1,0 +1,15 @@
+# IDE
+.idea/
+
+# Python 虚拟环境与缓存
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 密钥与环境变量（真实值禁止入库，模板见 mini_llm_gateway/.env.example）
+.env
+
+# 运行时数据（SQLite 数据库文件）
+data/
+*.db
