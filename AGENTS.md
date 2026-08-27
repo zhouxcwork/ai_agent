@@ -18,10 +18,9 @@ Issues 以 markdown 文件跟踪在仓库 `.scratch/<feature>/` 目录下（本�
 
 ## 目录
 
-- `mini_llm_gateway/`：独立 Python 项目（自带 pyproject.toml 和 .venv，用 uv 管理）
+- `mini_llm_gateway/`：独立 Python 项目（自带 pyproject.toml 和 .venv，用 uv 管理），真正的工作目录
 - `CONTEXT.md`：领域术语表（平台模型/供应商模型/版本/Trace 等概念的权威定义）
 - `docs/adr/`：架构决策记录（SQLite 选型、模板版本不可变）
-- 根 `pyproject.toml`：PyCharm 生成的空壳，可忽略；真正的工作目录是 `mini_llm_gateway/`
 
 ## 常用命令（均在 mini_llm_gateway/ 下执行）
 
