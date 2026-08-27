@@ -103,6 +103,21 @@ def test_all_targets_busy_rejected(tmp_path, fake_provider):
         assert fake_provider.complete_calls == []  # 未发生任何真实上游尝试
 
 
+def test_target_qps_rate_limits_per_model(tmp_path, fake_provider):
+    # 目标级 QPS（按模型独立限流）：qps=1 时同一目标连续第二次立即被拒；未配 qps 的目标不受影响
+    limits = LimitsConfig(
+        targets={
+            PRIMARY_KEY: TargetLimitConfig(max_concurrency=5, qps=1),
+        }
+    )
+    with _client(tmp_path, fake_provider, limits=limits) as client:
+        limiter = client.app.state.limiter
+        assert limiter.try_acquire_target(PRIMARY_KEY)
+        assert not limiter.try_acquire_target(PRIMARY_KEY)  # 突发额度耗尽，未到下一秒
+        assert limiter.try_acquire_target(BACKUP_KEY)  # 未配置 = 不限速
+        assert limiter.try_acquire_target(BACKUP_KEY)
+
+
 def test_target_limits_isolate_models_of_same_provider(tmp_path, fake_provider):
     # 模型粒度隔离：同供应商的两个模型各自计槽，flash 被占满不影响 smart 档的 pro
     def _target(provider: str, model: str) -> RouteTarget:

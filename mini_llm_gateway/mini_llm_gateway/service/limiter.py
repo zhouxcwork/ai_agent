@@ -59,6 +59,14 @@ class Limiter:
             key: _ConcurrencySlot(target_limit.max_concurrency)
             for key, target_limit in config.limits.targets.items()
         }
+        # 目标级 QPS 令牌桶（可选配置；未配 qps 的目标不设桶）
+        self._target_buckets: dict[str, _TokenBucket] = {
+            key: _TokenBucket(
+                target_limit.qps, target_limit.burst or max(1, int(target_limit.qps)), clock()
+            )
+            for key, target_limit in config.limits.targets.items()
+            if target_limit.qps is not None
+        }
 
     def _tenant_limit(self, tenant: str):
         return self.limits.tenants.get(tenant, self.limits.default)
@@ -90,6 +98,10 @@ class Limiter:
             slot.release()
 
     def try_acquire_target(self, target_key: str) -> bool:
+        # 先 QPS 桶后并发槽（与 enter_tenant 顺序一致）；任一不足都视为目标忙，由调用方跳过候选
+        bucket = self._target_buckets.get(target_key)
+        if bucket is not None and not bucket.try_take(self.clock()):
+            return False
         slot = self._target_slots.get(target_key)
         return slot.try_acquire() if slot is not None else True
 

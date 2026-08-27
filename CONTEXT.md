@@ -11,7 +11,7 @@
 _Avoid_: 模型别名、级别、平台模型
 
 **路由目标（Route Target）**:
-档位候选池中的一项，由供应商、模型、权重、能力与价格构成；选择与健康度都以它为粒度，标识格式为 `供应商/模型`。
+档位候选池中的一项，由协议端点连接（供应商 + 协议，同一供应商可经多协议接入）、模型、权重、能力与价格构成；选择与健康度都以它为粒度，标识格式为 `供应商/模型`（供应商段可含协议后缀，如 deepseek-anthropic/deepseek-v4-flash）。
 _Avoid_: 节点、后端、实例
 
 **供应商模型**:
@@ -53,6 +53,10 @@ _Avoid_: 修订、快照
 _Avoid_: 填充、填充模板
 
 ### 协议
+
+**协议适配器（Protocol Adapter）**:
+对上游 API 协议（OpenAI Chat Completions、OpenAI Responses、Anthropic Messages）的封装单位，把协议差异（鉴权、请求体、返回格式、流事件）翻译为统一的供应商调用契约；供应商与协议是两个维度，同一供应商可经不同协议端点接入。
+_Avoid_: SDK 封装、Provider（那是统一契约本身）
 
 **兼容端点**:
 说 OpenAI 官方方言的对外入口，共两个：/v1/chat/completions（Chat Completions 方言）与 /v1/responses（Responses 方言）；已有 OpenAI SDK 可无缝接入。

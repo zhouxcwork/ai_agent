@@ -36,7 +36,7 @@ def test_fallback_records_actual_target_in_trace(client, fake_provider):
 
 
 def test_stream_retries_target_per_config_before_fallback(client, fake_provider):
-    # 流式与非流式一致：首块前同目标按 attempts_per_target（默认 2）重试，再切换候选
+    # 流式与非流式一致：首块前同目标按 retries_per_target（默认 2）重试（初次+2 次=3 次尝试，ADR 0014），再切换候选
     fake_provider.fail_models = {PRIMARY_MODEL}
     response = client.post(
         "/v1/chat/completions",
@@ -44,7 +44,7 @@ def test_stream_retries_target_per_config_before_fallback(client, fake_provider)
     )
     assert response.status_code == 200
     assert "[DONE]" in response.text  # 切换后流完整走完（正文被 SSE JSON 转义，不做原文断言）
-    assert fake_provider.stream_calls.count(PRIMARY_MODEL) == 2
+    assert fake_provider.stream_calls.count(PRIMARY_MODEL) == 3
     assert fake_provider.stream_calls[-1] == BACKUP_MODEL
 
 

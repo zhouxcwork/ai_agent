@@ -12,6 +12,8 @@ from mini_llm_gateway.api import chat_routes, model_routes, prompt_routes, respo
 from mini_llm_gateway.config import GatewayConfig, load_config
 from mini_llm_gateway.errors import GatewayError, gateway_error_handler, validation_error_handler
 from mini_llm_gateway.provider.openai_compatible import OpenAICompatibleProvider
+from mini_llm_gateway.provider.anthropic_adapter import AnthropicAdapter
+from mini_llm_gateway.provider.responses_adapter import ResponsesAdapter
 from mini_llm_gateway.provider.base import Provider
 from mini_llm_gateway.repository.prompt_repository import PromptRepository
 from mini_llm_gateway.repository.response_repository import ResponseRepository
@@ -61,8 +63,17 @@ def create_app(config: GatewayConfig | None = None, provider: Provider | None = 
         app.state.responses = responses
         app.state.router = ModelRouter(gateway_config)
         app.state.limiter = Limiter(gateway_config)
+        # 协议 → 适配器映射（ADR 0013）；测试替身铺满全部协议，注入方式不变
+        if provider is not None:
+            adapters: dict[str, Provider] = {"openai": provider, "anthropic": provider, "responses": provider}
+        else:
+            adapters = {
+                "openai": OpenAICompatibleProvider(),
+                "anthropic": AnthropicAdapter(),
+                "responses": ResponsesAdapter(),
+            }
         app.state.gateway = GatewayService(
-            gateway_config, app.state.router, provider or OpenAICompatibleProvider(), prompts, traces,
+            gateway_config, app.state.router, adapters, prompts, traces,
             app.state.limiter,
         )
         yield

@@ -48,17 +48,24 @@ class GatewayService:
         self,
         config: GatewayConfig,
         router: ModelRouter,
-        provider: Provider,
+        providers: dict[str, Provider],
         prompt_repository: PromptRepository,
         trace_repository: TraceRepository,
         limiter: Limiter,
     ) -> None:
         self.config = config
         self.router = router
-        self.provider = provider
+        self.providers = providers
         self.prompts = prompt_repository
         self.traces = trace_repository
         self.limiter = limiter
+
+    def _adapter(self, target: ResolvedTarget) -> Provider:
+        # ADR 0013：按路由目标的协议端点选择适配器，屏蔽协议差异
+        adapter = self.providers.get(target.protocol)
+        if adapter is None:
+            raise GatewayError("platform.misconfigured", f"协议 {target.protocol} 没有可用适配器", 503)
+        return adapter
 
     def calculate_cost(self, target: ResolvedTarget, usage: Usage) -> float:
         # 按实际命中路由目标的单价计算本次调用成本（ADR 0012）：
@@ -156,10 +163,10 @@ class GatewayService:
                 target_busy = True  # 路由目标并发已满：跳过该目标（ADR 0011，按模型粒度）
                 continue
             try:
-                for retry_number in range(self.config.attempts_per_target):
+                for retry_number in range(self.config.retries_per_target + 1):
                     attempts += 1
                     try:
-                        content, usage, upstream_id = await self.provider.complete(
+                        content, usage, upstream_id = await self._adapter(target).complete(
                             target, messages, request.timeout_seconds, request.response_schema
                         )
                         parsed: dict[str, Any] | list[Any] | None = None
@@ -170,7 +177,7 @@ class GatewayService:
                             for structured_attempt in range(1 + self.config.structured_output.max_retries):
                                 if structured_attempt > 0:
                                     attempts += 1
-                                    content, usage, upstream_id = await self.provider.complete(
+                                    content, usage, upstream_id = await self._adapter(target).complete(
                                         target, messages, request.timeout_seconds, request.response_schema
                                     )
                                 parsed, content, last_code = self._parse_with_repair(
@@ -252,8 +259,8 @@ class GatewayService:
                         # UpstreamRejectedError（401/403/404）等不可重试异常在此 break 换下一候选
                         last_error = exc
                         self.router.record_failure(target.key)
-                        if is_retryable(exc) and retry_number < self.config.attempts_per_target - 1:
-                            await asyncio.sleep(0.1)
+                        if is_retryable(exc) and retry_number < self.config.retries_per_target:
+                            await asyncio.sleep(0.1 * (retry_number + 1))  # 线性退避：0.1s / 0.2s（ADR 0014）
                             continue
                         break
             finally:
@@ -357,8 +364,8 @@ class GatewayService:
                 if not self.limiter.try_acquire_target(target.key):
                     continue  # 路由目标并发已满：跳过该目标，尝试下一候选（按模型粒度）
                 try:
-                    # 每目标尝试次数走 attempts_per_target 配置，与非流式一致；首块前可重试可切换
-                    for retry_number in range(self.config.attempts_per_target):
+                    # 每目标重试次数走 retries_per_target 配置（不含初次，ADR 0014），与非流式一致；首块前可重试可切换
+                    for retry_number in range(self.config.retries_per_target + 1):
                         monitor = JsonSyntaxMonitor() if structured else None
                         collected: list[str] = []  # 结构化时收集增量做流尾终审
                         last_target = target
@@ -366,7 +373,7 @@ class GatewayService:
                         finish_reason = "stop"
                         try:
                             attempts += 1
-                            async for item in self.provider.stream(
+                            async for item in self._adapter(target).stream(
                                 target, messages, request.timeout_seconds, request.response_schema
                             ):
                                 if isinstance(item, Usage):
@@ -451,8 +458,8 @@ class GatewayService:
                             if emitted:
                                 abort = True  # 首块后不重试不切换，避免文本重复
                                 break
-                            if is_retryable(exc) and retry_number < self.config.attempts_per_target - 1:
-                                await asyncio.sleep(0.1)
+                            if is_retryable(exc) and retry_number < self.config.retries_per_target:
+                                await asyncio.sleep(0.1 * (retry_number + 1))  # 线性退避：0.1s / 0.2s（ADR 0014）
                                 continue  # 首块前同目标重试
                             break  # 切换下一健康候选
                 finally:

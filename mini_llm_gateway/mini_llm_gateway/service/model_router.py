@@ -86,6 +86,7 @@ class ModelRouter:
             provider=target.provider,
             provider_model=target.model,
             key=target.key,
+            protocol=provider.protocol,
             base_url=provider.base_url,
             api_key_env=provider.api_key_env,
             supports_structured_output=target.supports_structured_output,

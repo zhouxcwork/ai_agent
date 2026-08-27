@@ -44,7 +44,9 @@ async def test_client_disconnect_records_cancelled_trace(tmp_path, fake_provider
     traces = TraceRepository(config.database.path)
     await prompts.initialize()
     await traces.initialize()
-    gateway = GatewayService(config, ModelRouter(config), fake_provider, prompts, traces, Limiter(config))
+    # 测试替身铺满全部协议（与 app.py 的注入规则一致，ADR 0013）
+    adapters = {"openai": fake_provider, "anthropic": fake_provider, "responses": fake_provider}
+    gateway = GatewayService(config, ModelRouter(config), adapters, prompts, traces, Limiter(config))
 
     request = LLMRequest(model="fast", messages=[Message(role="user", content="hi")], stream=True)
     generator = gateway.stream(request)

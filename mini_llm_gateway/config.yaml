@@ -17,31 +17,40 @@ limits:
   default: {qps: 10, burst: 20, max_concurrency: 5}   # 未单独配置的租户（含 anonymous）
   tenants:
     tenant-demo: {qps: 20, burst: 40, max_concurrency: 10}
-  targets:   # 键 = 路由目标（供应商/模型），未配置的目标不限
-    deepseek/deepseek-v4-flash: {max_concurrency: 20}
-    deepseek/deepseek-v4-pro: {max_concurrency: 10}
+  targets:   # 键 = 路由目标（供应商/模型），未配置的目标不限；qps 可选（按模型独立限流）
+    deepseek-anthropic/deepseek-v4-flash: {max_concurrency: 20, qps: 10}
+    deepseek-responses/deepseek-v4-pro: {max_concurrency: 10, qps: 5}
 
+# 协议端点连接（ADR 0013）：一个 provider 条目 = 供应商经某协议接入的一条连接；
+# DeepSeek 两条连接共用同一 Key，分别走 Anthropic Messages 与 OpenAI Responses 端点
 providers:
+  deepseek-anthropic:
+    base_url: https://api.deepseek.com/anthropic
+    api_key_env: DEEPSEEK_API_KEY
+    protocol: anthropic
+    enabled: true
+  deepseek-responses:
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+    protocol: responses
+    enabled: true
   openai:
     base_url: https://api.openai.com
     api_key_env: OPENAI_API_KEY
+    protocol: openai
     enabled: false   # 暂未接入（无 Key 时被选中会 503），先保留配置；接入后改 true
-  deepseek:
-    base_url: https://api.deepseek.com
-    api_key_env: DEEPSEEK_API_KEY
-    enabled: true
 
 # 档位：model 字段唯一合法取值；候选按权重轮询选主选，失败按剩余健康候选 fallback
-# DeepSeek 只接入 V4-Flash / V4-Pro（版本 0731 / 0813）；权重向 DeepSeek 倾斜
+# 双协议组合（ADR 0013）：fast → V4-Flash 走 Anthropic Messages、smart → V4-Pro 走 OpenAI Responses
 modes:
   fast:
     strategy: weighted_round_robin
     targets:
-      - provider: deepseek
+      - provider: deepseek-anthropic
         model: deepseek-v4-flash
         weight: 9
         supports_structured_output: true
-        structured_output_mode: json_object
+        structured_output_mode: tool_use   # Anthropic 协议无 response_format，tool 强制输出 JSON
         # 高峰时段价（工作日 9-12/14-18），输入按缓存未命中；人民币 3.0/9.0 元按 7.1 汇率折美元
         price_per_million: {input: 0.42, output: 1.27}
       - provider: openai
@@ -53,11 +62,11 @@ modes:
   smart:
     strategy: weighted_round_robin
     targets:
-      - provider: deepseek
+      - provider: deepseek-responses
         model: deepseek-v4-pro
         weight: 9
         supports_structured_output: true
-        structured_output_mode: json_object
+        structured_output_mode: json_schema   # Responses 协议结构化走 text.format
         # 高峰时段价（工作日 9-12/14-18），输入按缓存未命中；人民币 9.0/27.0 元按 7.1 汇率折美元
         price_per_million: {input: 1.27, output: 3.80}
       - provider: openai
@@ -76,5 +85,5 @@ circuit_breaker:
 structured_output:
   max_retries: 2
 
-# Fallback：切换下一候选前，每个路由目标的尝试次数（流式与非流式一致）
-attempts_per_target: 2
+# Fallback：切换下一候选前，每个路由目标的重试次数（不含初次，ADR 0014；线性退避 0.1s/0.2s）
+retries_per_target: 2

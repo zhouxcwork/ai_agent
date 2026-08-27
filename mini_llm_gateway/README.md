@@ -1,13 +1,13 @@
 # Mini LLM Gateway
 
-OpenAI 协议兼容的 LLM 网关：档位路由（fast/smart）、多供应商（openai/deepseek）权重分流、熔断健康度、Prompt 模板管理（Jinja2 + SQLite）、调用 trace 审计、Docker 一键部署。任意 OpenAI SDK 改一个 base_url 即可接入。
+OpenAI 协议兼容的 LLM 网关：档位路由（fast/smart）、上游多协议适配（同一 DeepSeek 供应商同时经 Anthropic Messages 与 OpenAI Responses 两种协议接入，ADR 0013）、熔断健康度、Prompt 模板管理（Jinja2 + SQLite）、调用 trace 审计、Docker 一键部署。任意 OpenAI SDK 改一个 base_url 即可接入。
 
 ## 架构分层
 
 ```
 api/        HTTP 路由层：协议方言（chat completions / responses）在此翻译，不含业务逻辑
 service/    业务编排层：gateway_service（编排）、model_router（档位路由 + 熔断状态机）、limiter（多级资源边界）、repair / syntax_monitor（结构化输出修复与流中语法监控）
-provider/   供应商适配层：OpenAI Compatible（AsyncOpenAI），密钥只在这一层出现
+provider/   供应商适配层：三种协议适配器（openai_compatible / anthropic_adapter / responses_adapter），密钥只在这一层出现
 repository/ 持久化层：aiosqlite，trace / prompt 模板 / responses 会话三张表
 schemas/    Pydantic 契约：内部领域模型 + OpenAI 方言入参出参（openai_compat / responses_compat）
 config.py   配置加载：config.yaml → GatewayConfig（providers / modes / circuit_breaker）
@@ -63,7 +63,7 @@ cp .env.example .env && docker compose up -d   # SQLite 持久化在 ./data
 ## 认证与资源边界（ADR 0011）
 
 - **调用方认证**：`Authorization: Bearer <apikey>`，config.yaml `auth.api_keys` 白名单维护 apikey → tenantId；白名单为空 = 不启用认证（本地开发）
-- **三级限流，全部 429 快速拒绝**：租户 QPS 令牌桶（容量 = 突发额度）、租户并发、路由目标并发（`供应商/模型` 粒度，同供应商不同模型互不挤占；占满则跳过该候选，全部占满报 `resource.target_busy`）
+- **四级资源边界，全部 429 快速拒绝**：租户 QPS 令牌桶（容量 = 突发额度）、租户并发、路由目标 QPS（可选，按模型独立限流）、路由目标并发（`供应商/模型` 粒度，同供应商不同模型互不挤占；占满则跳过该候选，全部占满报 `resource.target_busy`）
 - **内容拒答不绕过**：上游 `finish_reason=content_filter` 时不重试、不换模型，200 + finish_reason 透传（Responses 方言为 status=incomplete），trace 记 `refused` 状态
 
 ## Trace 可观测字段（ADR 0012）
@@ -81,11 +81,13 @@ cp .env.example .env && docker compose up -d   # SQLite 持久化在 ./data
 
 **指标与日志分工**：Logs（`llm_call_trace` / `route_decision` 结构化日志）记单次细节，Trace（SQLite 表）供查询与离线聚合（`evals/routing_report.py`）；在线 Metrics 端点暂不提供（单实例 MVP，ADR 0012）。
 
-## 档位路由（model 字段语义）
+## 档位路由（model 字段语义）与双协议适配
 
-**model 字段只接受档位名**（`fast` / `smart`，config.yaml 可扩展），传具体模型名（如 `gpt-4o`）返回 400 `unknown_mode`。响应 `model` 回显档位名，实际命中的路由目标在扩展字段 `actual_model`（格式 `供应商/模型`，如 `deepseek/deepseek-chat`）。
+**model 字段只接受档位名**（`fast` / `smart`，config.yaml 可扩展），传具体模型名（如 `gpt-4o`）返回 400 `unknown_mode`。响应 `model` 回显档位名，实际命中的路由目标在扩展字段 `actual_model`（格式 `供应商/模型`，如 `deepseek-anthropic/deepseek-v4-flash`）。
 
-- 档位候选池按**权重轮询**分流；主选失败先在同目标按 `attempts_per_target`（默认 2）重试，再切换剩余健康候选（流式仅首块前可重试/切换）
+**协议适配发生在档位内部**（ADR 0013）：路由目标经 `providers.*.protocol` 绑定协议适配器——fast 档 V4-Flash 走 Anthropic Messages 端点（`https://api.deepseek.com/anthropic`）、smart 档 V4-Pro 走 OpenAI Responses 端点，两个连接共用同一 API Key；鉴权头、请求体、返回格式与流事件的差异全部封装在适配器内，对上面两层不可见。
+
+- 档位候选池按**权重轮询**分流；主选失败先在同目标按 `retries_per_target`（默认 2，即初次 + 2 次重试 = 最多 3 次尝试）线性退避重试（0.1s / 0.2s，ADR 0014），再切换剩余健康候选（流式仅首块前可重试/切换）
 - 每次选路输出 `route_decision` 结构化日志（选中链 + 跳过目标及原因：熔断中/供应商停用/能力不匹配），与 trace 的 attempts/actual_model 互补
 - 每个路由目标独立维护**熔断**：连续失败 ≥ 阈值熔断，冷却期满半开试探，成功恢复（参数在 `circuit_breaker` 段）
 - 候选耗尽或无健康候选返回 503（`model_unavailable` / `no_healthy_route`）；流式场景以流内失败事件收尾
@@ -124,7 +126,7 @@ second = client.responses.create(model="smart", input="第二轮", previous_resp
 
 ## 结构化输出：两层保证 + 修复边界 + 流式裁决
 
-- **两层保证**：请求时声明 JSON Schema（第一层：供应商结构化模式 / schema 注入）；返回后本地 Schema 校验（第二层）
+- **两层保证**：请求时声明 JSON Schema（第一层：供应商结构化模式，三种 mode——`json_schema` / `json_object` / `tool_use`，Anthropic 协议无 response_format，经工具强制调用输出 JSON，ADR 0013）；返回后本地 Schema 校验（第二层）
 - **修复边界（非流式）**：输出被 markdown 包裹或夹杂杂文本时先无损提取修复；仍失败按 `structured_output.max_retries`（默认 2）重试上游；耗尽返回明确错误码，绝不静默；内容类错误不计熔断
 - **Structured Streaming**：`stream=true` 与 `response_format` 可组合——流中轻量语法监控（破损立即断流省 token），流尾完整 JSON 解析 + Schema 裁决，失败发流内错误事件
 - **流式 usage**：上游开启 include_usage，chat 末尾 usage chunk 与 responses 的 completed 事件携带真实 token，trace 记真实成本
@@ -139,12 +141,12 @@ second = client.responses.create(model="smart", input="第二轮", previous_resp
 
 ## 配置说明（config.yaml）
 
-- `providers.*`：供应商连接（base_url、api_key_env 环境变量名、enabled 开关）
-- `modes.<档位>.targets[]`：候选池（provider、model、weight、结构化能力、单价）
+- `providers.*`：协议端点连接（base_url、api_key_env 环境变量名、protocol 协议适配器、enabled 开关）；同一供应商可平铺多条连接（如 deepseek-anthropic / deepseek-responses）
+- `modes.<档位>.targets[]`：候选池（provider、model、weight、结构化能力与模式、单价）
 - `circuit_breaker`：failure_threshold / cooldown_seconds
-- `attempts_per_target`：fallback 切换前每目标尝试次数（流式与非流式一致，默认 2）
+- `retries_per_target`：fallback 切换前每目标重试次数（不含初次，线性退避 0.1s/0.2s，ADR 0014）
 - `auth.api_keys`：调用方白名单 apikey → tenantId（为空 = 不启用认证）
-- `limits`：租户 QPS/burst/并发（default + tenants 覆盖）与路由目标并发（`targets`，键 = `供应商/模型`）
+- `limits`：租户 QPS/burst/并发（default + tenants 覆盖）与路由目标资源边界（`targets`，键 = `供应商/模型`，max_concurrency 必选、qps 可选）
 - `database.path`：SQLite 路径；`admin.token_env`：管理令牌环境变量名
 
 ## 测试与路由质量报告

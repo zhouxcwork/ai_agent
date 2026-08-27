@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from typing import Literal
+
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
@@ -16,9 +18,11 @@ class AdminConfig(BaseModel):
 
 
 class ProviderConfig(BaseModel):
-    # 供应商连接信息：OpenAI 兼容地址 + 密钥环境变量名（真实密钥只在进程环境里）。
+    # 协议端点连接：供应商经某协议接入的地址 + 密钥环境变量名（真实密钥只在进程环境里）。
+    # 同一供应商可平铺多条连接（如 deepseek-anthropic / deepseek-responses 共用一个 Key），ADR 0013。
     base_url: str
     api_key_env: str
+    protocol: Literal["openai", "anthropic", "responses"] = "openai"
     enabled: bool = True
 
 
@@ -28,7 +32,7 @@ class RouteTarget(BaseModel):
     model: str
     weight: int = Field(default=1, ge=1)
     supports_structured_output: bool = False
-    structured_output_mode: str = "json_schema"  # json_schema | json_object
+    structured_output_mode: str = "json_schema"  # json_schema | json_object | tool_use（Anthropic，ADR 0013）
     price_per_million: dict[str, float] = Field(default_factory=dict)
 
     @property
@@ -66,8 +70,11 @@ class TenantLimitConfig(BaseModel):
 
 
 class TargetLimitConfig(BaseModel):
-    # 单路由目标（供应商/模型）并发上限，对齐上游按模型的并发配额；未配置的目标不限制。
+    # 单路由目标（供应商/模型）资源边界：并发上限 + 可选 QPS 令牌桶（ADR 0011/0013 作业扩展）；
+    # 未配置的目标不限制；burst 缺省按 qps 取整（1 秒突发额度）。
     max_concurrency: int = Field(default=20, ge=1)
+    qps: float | None = Field(default=None, gt=0)
+    burst: int | None = Field(default=None, ge=1)
 
 
 class LimitsConfig(BaseModel):
@@ -83,8 +90,8 @@ class GatewayConfig(BaseModel):
     limits: LimitsConfig = LimitsConfig()
     circuit_breaker: CircuitBreakerConfig = CircuitBreakerConfig()
     structured_output: StructuredOutputConfig = StructuredOutputConfig()
-    # Fallback 切换前每个路由目标的尝试次数（流式与非流式一致）
-    attempts_per_target: int = Field(default=2, ge=1)
+    # Fallback 切换前每个路由目标的重试次数（不含初次尝试，ADR 0014）；流式与非流式一致
+    retries_per_target: int = Field(default=2, ge=0)
     providers: dict[str, ProviderConfig]
     modes: dict[str, ModeConfig]
 
@@ -102,10 +109,11 @@ class GatewayConfig(BaseModel):
 
 
 class ResolvedTarget(BaseModel):
-    # 路由决策产物：路由目标 + 供应商连接信息合一，供供应商适配层与成本计算使用。
+    # 路由决策产物：路由目标 + 协议端点连接信息合一，供供应商适配层与成本计算使用。
     provider: str
     provider_model: str
     key: str  # 供应商/模型，对外即 actual_model
+    protocol: Literal["openai", "anthropic", "responses"] = "openai"
     base_url: str
     api_key_env: str
     supports_structured_output: bool
