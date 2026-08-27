@@ -58,11 +58,16 @@ def _translate_messages(messages: list[Message]) -> tuple[str | None, list[dict[
 
 
 def _usage_from_anthropic(usage: Any) -> Usage:
-    # 防御性提取（ADR 0012）：cache_read 并入 cached_tokens；reasoning 细分 Anthropic 不提供，记 0。
+    # 防御性提取（ADR 0012）：Anthropic 的 input_tokens 不含缓存部分（cache_read/cache_creation
+    # 是独立字段），并入总量以对齐领域口径"cached ⊆ input"；cached 只记读命中（计价走缓存价）。
+    # reasoning 细分 Anthropic 不提供，记 0。
+    plain_input = getattr(usage, "input_tokens", 0) or 0
+    cache_read = getattr(usage, "cache_read_input_tokens", None) or 0
+    cache_creation = getattr(usage, "cache_creation_input_tokens", None) or 0
     return Usage(
-        input_tokens=getattr(usage, "input_tokens", 0) or 0,
+        input_tokens=plain_input + cache_read + cache_creation,
         output_tokens=getattr(usage, "output_tokens", 0) or 0,
-        cached_tokens=getattr(usage, "cache_read_input_tokens", None) or 0,
+        cached_tokens=cache_read,
         reasoning_tokens=0,
     )
 
@@ -141,8 +146,9 @@ class AnthropicAdapter:
     ) -> AsyncIterator[str | Usage | FinishReason | UpstreamID]:
         request = self._build_request(target, messages, timeout_seconds, response_schema)
         request["stream"] = True
-        input_tokens = 0
-        cached_tokens = 0
+        plain_input = 0
+        cache_read = 0
+        cache_creation = 0
         try:
             events = await self.create_client(target).messages.create(**request)
             async for event in events:
@@ -150,8 +156,10 @@ class AnthropicAdapter:
                     message = event.message
                     if getattr(message, "id", None):
                         yield UpstreamID(message.id)
-                    input_tokens = getattr(message.usage, "input_tokens", 0) or 0
-                    cached_tokens = getattr(message.usage, "cache_read_input_tokens", None) or 0
+                    # 口径同 _usage_from_anthropic：缓存字段独立，input 需并入总量
+                    plain_input = getattr(message.usage, "input_tokens", 0) or 0
+                    cache_read = getattr(message.usage, "cache_read_input_tokens", None) or 0
+                    cache_creation = getattr(message.usage, "cache_creation_input_tokens", None) or 0
                 elif event.type == "content_block_delta":
                     delta = event.delta
                     if delta.type == "text_delta":
@@ -162,9 +170,9 @@ class AnthropicAdapter:
                 elif event.type == "message_delta":
                     stop_reason = _map_stop_reason(event.delta.stop_reason)
                     usage = Usage(
-                        input_tokens=input_tokens,
+                        input_tokens=plain_input + cache_read + cache_creation,
                         output_tokens=getattr(event.usage, "output_tokens", 0) or 0,
-                        cached_tokens=cached_tokens,
+                        cached_tokens=cache_read,
                         reasoning_tokens=0,
                     )
                     yield FinishReason(stop_reason)

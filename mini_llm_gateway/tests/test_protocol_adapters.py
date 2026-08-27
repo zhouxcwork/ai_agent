@@ -92,11 +92,13 @@ def _fake_anthropic_client(response):
 
 
 def _anthropic_response(blocks, stop_reason="end_turn"):
+    # input=7 不含缓存（Anthropic 口径），cache_read=2/cache_creation=3 为独立字段
     return SimpleNamespace(
         content=blocks,
         stop_reason=stop_reason,
         id="msg_1",
-        usage=SimpleNamespace(input_tokens=7, output_tokens=3, cache_read_input_tokens=2),
+        usage=SimpleNamespace(input_tokens=7, output_tokens=3,
+                              cache_read_input_tokens=2, cache_creation_input_tokens=3),
     )
 
 
@@ -108,7 +110,8 @@ async def test_anthropic_complete_extracts_tool_use_json(monkeypatch):
     monkeypatch.setattr(adapter, "create_client", lambda target: _fake_anthropic_client(response))
     content, usage, upstream_id = await adapter.complete(anthropic_target(), MSGS, 30, {"type": "object"})
     assert content == '{"score": 9}'  # tool_use.input 序列化回字符串，两层校验照常工作
-    assert usage == Usage(input_tokens=7, output_tokens=3, cached_tokens=2, reasoning_tokens=0)
+    # 口径（ADR 0012 修订）：input 并入缓存总量 7+2+3=12，cached 只记读命中 2
+    assert usage == Usage(input_tokens=12, output_tokens=3, cached_tokens=2, reasoning_tokens=0)
     assert upstream_id == "msg_1"
 
 
@@ -137,7 +140,8 @@ async def _run_anthropic_stream(monkeypatch, events):
 async def test_anthropic_stream_translates_events(monkeypatch):
     events = [
         SimpleNamespace(type="message_start", message=SimpleNamespace(
-            id="msg_2", usage=SimpleNamespace(input_tokens=10, output_tokens=1, cache_read_input_tokens=4))),
+            id="msg_2", usage=SimpleNamespace(input_tokens=10, output_tokens=1,
+                                              cache_read_input_tokens=4, cache_creation_input_tokens=1))),
         SimpleNamespace(type="content_block_delta", delta=SimpleNamespace(type="text_delta", text="你")),
         SimpleNamespace(type="content_block_delta", delta=SimpleNamespace(type="text_delta", text="好")),
         SimpleNamespace(type="message_delta", delta=SimpleNamespace(stop_reason="end_turn"),
@@ -147,7 +151,8 @@ async def test_anthropic_stream_translates_events(monkeypatch):
     assert signals[0].value == "msg_2"  # UpstreamID
     assert signals[1:3] == ["你", "好"]
     assert signals[3].value == "stop"  # FinishReason
-    assert signals[4] == Usage(input_tokens=10, output_tokens=5, cached_tokens=4, reasoning_tokens=0)
+    # 流式同口径：input = 10 + cache_read 4 + cache_creation 1 = 15
+    assert signals[4] == Usage(input_tokens=15, output_tokens=5, cached_tokens=4, reasoning_tokens=0)
 
 
 async def test_anthropic_stream_tool_json_deltas(monkeypatch):

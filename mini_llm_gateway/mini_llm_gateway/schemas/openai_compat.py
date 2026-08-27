@@ -28,6 +28,7 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     response_format: dict[str, Any] | None = None
     gateway_prompt: PromptSelection | None = None  # 非标扩展：模板选择，SDK 经 extra_body 传入
+    timeout_seconds: float | None = Field(default=None, gt=0, le=120)  # 非标扩展：单请求上游超时（缺省 30）
     # 以下采样参数接受但忽略
     temperature: float | None = None
     top_p: float | None = None
@@ -97,6 +98,7 @@ def normalize_chat_request(payload: ChatCompletionRequest) -> LLMRequest:
         stream=payload.stream,
         response_schema=response_schema,
         prompt=payload.gateway_prompt,
+        timeout_seconds=payload.timeout_seconds or 30,
     )
 
 

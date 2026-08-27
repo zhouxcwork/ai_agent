@@ -85,5 +85,5 @@ circuit_breaker:
 structured_output:
   max_retries: 2
 
-# Fallback：切换下一候选前，每个路由目标的重试次数（不含初次，ADR 0014；线性退避 0.1s/0.2s）
+# Fallback：切换下一候选前，每个路由目标的重试次数（不含初次，ADR 0014；指数退避 0.2s/0.4s）
 retries_per_target: 2

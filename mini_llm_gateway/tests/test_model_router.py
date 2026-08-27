@@ -190,3 +190,17 @@ def test_route_decision_logs_selected_and_skipped_reasons(clock, caplog):
     assert {"target": "disabled/m1", "reason": "provider_disabled"} in decision["skipped"]
     assert {"target": "p1/tripped", "reason": "circuit_open"} in decision["skipped"]
     assert {"target": "p2/plain", "reason": "capability_mismatch"} in decision["skipped"]
+
+
+def test_provider_model_name_resolves_to_mode():
+    # 档位别名兼容：model 传候选池中的供应商模型名时映射到所属档位（ADR 0007 扩展）
+    router = ModelRouter(make_config([target("p1", "some-model")]))
+    candidates = router.candidates("some-model")
+    assert [c.key for c in candidates] == ["p1/some-model"]
+
+
+def test_unknown_model_and_mode_still_rejected():
+    router = ModelRouter(make_config([target("p1", "some-model")]))
+    with pytest.raises(GatewayError) as exc:
+        router.candidates("gpt-4o")
+    assert exc.value.code == "route.unknown_mode"

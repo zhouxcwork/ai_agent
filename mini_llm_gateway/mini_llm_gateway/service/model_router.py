@@ -41,6 +41,11 @@ class ModelRouter:
     ) -> list[ResolvedTarget]:
         mode_config = self.config.modes.get(mode)
         if mode_config is None:
+            # 档位别名兼容：传入候选池中的供应商模型名时映射到所属档位（模型唯一属于一个档位；
+            # 若多档位共用同名模型，取配置顺序第一个）。档位仍是主推语义（ADR 0007）。
+            mode = self._mode_of_model(mode) or mode
+            mode_config = self.config.modes.get(mode)
+        if mode_config is None:
             raise GatewayError("route.unknown_mode", f"档位不存在: {mode}（合法值: {sorted(self.config.modes)}）", 400)
         healthy: list[RouteTarget] = []
         skipped: list[dict[str, str]] = []
@@ -71,6 +76,13 @@ class ModelRouter:
             ),
         )
         return [self._resolve(target) for target in ordered]
+
+    def _mode_of_model(self, provider_model: str) -> str | None:
+        # 档位别名：供应商模型名 → 所属档位（config 中 target.model 精确匹配）
+        for mode_name, mode_config in self.config.modes.items():
+            if any(target.model == provider_model for target in mode_config.targets):
+                return mode_name
+        return None
 
     def _ordered(self, mode: str, healthy: list[RouteTarget]) -> list[RouteTarget]:
         # 权重展开轮询选主选；其余候选按原配置顺序跟随，作为 fallback 链。

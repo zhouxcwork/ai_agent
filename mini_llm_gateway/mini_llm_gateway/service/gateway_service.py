@@ -260,7 +260,7 @@ class GatewayService:
                         last_error = exc
                         self.router.record_failure(target.key)
                         if is_retryable(exc) and retry_number < self.config.retries_per_target:
-                            await asyncio.sleep(0.1 * (retry_number + 1))  # 线性退避：0.1s / 0.2s（ADR 0014）
+                            await asyncio.sleep(0.2 * 2 ** retry_number)  # 指数退避：0.2s / 0.4s（ADR 0014）
                             continue
                         break
             finally:
@@ -459,7 +459,7 @@ class GatewayService:
                                 abort = True  # 首块后不重试不切换，避免文本重复
                                 break
                             if is_retryable(exc) and retry_number < self.config.retries_per_target:
-                                await asyncio.sleep(0.1 * (retry_number + 1))  # 线性退避：0.1s / 0.2s（ADR 0014）
+                                await asyncio.sleep(0.2 * 2 ** retry_number)  # 指数退避：0.2s / 0.4s（ADR 0014）
                                 continue  # 首块前同目标重试
                             break  # 切换下一健康候选
                 finally:
