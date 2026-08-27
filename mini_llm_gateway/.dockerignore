@@ -1,0 +1,19 @@
+# 密钥与环境：绝不进构建上下文（.env 仅由 compose 的 env_file 运行时注入）
+.env
+.env.*
+!.env.example
+
+# 运行数据与本地环境
+data/
+.venv/
+.pytest_cache/
+.idea/
+__pycache__/
+*.pyc
+
+# 镜像不需要的源码
+tests/
+evals/
+main.py
+docker-compose.yml
+uv.lock

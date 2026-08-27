@@ -8,7 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY mini_llm_gateway ./mini_llm_gateway
-RUN pip install --no-cache-dir .
+# pip 源可覆盖（国内网络在 docker-compose.yml 经 build.args 指向清华镜像）
+ARG PIP_INDEX_URL=https://pypi.org/simple
+RUN pip install --no-cache-dir --index-url ${PIP_INDEX_URL} .
 
 RUN mkdir -p /app/data && chown -R 10001:10001 /app
 USER 10001

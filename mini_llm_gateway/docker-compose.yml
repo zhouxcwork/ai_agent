@@ -1,6 +1,9 @@
 services:
   gateway:
-    build: .
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
     ports:
       - "8000:8000"
     env_file:

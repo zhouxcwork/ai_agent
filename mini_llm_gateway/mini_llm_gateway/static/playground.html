@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini LLM Gateway · 接口测试台</title>
+<style>
+  :root { --border: #d9dee5; --bg: #f5f7fa; --accent: #2563eb; --ok: #059669; --bad: #dc2626; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: #1f2937; }
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 20px; background: #fff; border-bottom: 1px solid var(--border); flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 16px; margin: 0; margin-right: auto; }
+  header a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  input, textarea, button, select { font: inherit; }
+  input[type=text], input[type=password], input[type=number], select, textarea { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; background: #fff; }
+  textarea { width: 100%; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  button { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+  button.secondary { background: #fff; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: wait; }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 16px; padding: 16px 20px; max-width: 1500px; margin: 0 auto; align-items: start; }
+  .panel { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; color: #374151; font-weight: 600; }
+  .panel h2 .method { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #fff; background: #6b7280; border-radius: 4px; padding: 1px 6px; margin-right: 6px; }
+  .panel h2 .method.post { background: #059669; } .panel h2 .method.get { background: #2563eb; }
+  label { font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px; margin-top: 8px; }
+  .row { display: flex; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 0; }
+  .checkline { display: flex; gap: 16px; align-items: center; font-size: 13px; color: #374151; margin: 8px 0; flex-wrap: wrap; }
+  .checkline label { margin: 0; display: flex; gap: 4px; align-items: center; color: inherit; font-size: 13px; }
+  .result { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
+  .status { font-family: ui-monospace, Menlo, monospace; font-size: 12px; margin-bottom: 6px; }
+  .status .code-ok { color: var(--ok); font-weight: 700; } .status .code-bad { color: var(--bad); font-weight: 700; }
+  .body { background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 10px; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; font: 12px/1.5 ui-monospace, Menlo, monospace; display: none; }
+  .body.stream { min-height: 40px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; white-space: nowrap; }
+  th { background: #f9fafb; color: #6b7280; }
+  .tag { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 11px; }
+  .tag.ok { background: #ecfdf5; color: #065f46; } .tag.bad { background: #fef2f2; color: #991b1b; }
+  .tag.gray { background: #f3f4f6; color: #6b7280; }
+  .chip { display: inline-block; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); cursor: pointer; font-size: 12px; margin: 2px; }
+  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .verdict { font-size: 13px; padding: 6px 10px; border-radius: 6px; margin-top: 8px; display: none; }
+  .verdict.ok { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .verdict.bad { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .hint { color: #9ca3af; font-size: 12px; }
+  .panel.wide { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mini LLM Gateway · 接口测试台</h1>
+  <a href="/admin">模板管理 →</a>
+  <input type="text" id="bearer" placeholder="Bearer apikey（auth.api_keys）" style="width: 230px" value="__BEARER_DEFAULT__">
+  <input type="password" id="admin-token" placeholder="X-Admin-Token（写接口）" style="width: 180px" value="__ADMIN_TOKEN_DEFAULT__">
+</header>
+
+<main>
+  <!-- ============ 服务状态 ============ -->
+  <section class="panel">
+    <h2><span class="method get">GET</span>服务状态 /healthz · /v1/models</h2>
+    <div class="row">
+      <button class="secondary" onclick="checkHealth()">健康检查</button>
+      <button class="secondary" onclick="loadModels()">拉取档位与健康</button>
+    </div>
+    <div class="result"><div class="status" id="health-status"></div><div class="body" id="health-body"></div></div>
+    <div style="overflow: auto; margin-top: 8px"><table id="routes-table" style="display: none"></table></div>
+  </section>
+
+  <!-- ============ Chat Completions ============ -->
+  <section class="panel">
+    <h2><span class="method post">POST</span>Chat Completions /v1/chat/completions</h2>
+    <div class="row">
+      <div><label>档位 model</label><select id="chat-mode" style="width: 100%"><option>fast</option><option>smart</option></select></div>
+      <div><label>system（可选）</label><input type="text" id="chat-system" placeholder="你是一个简洁的助手"></div>
+    </div>
+    <label>user 消息</label>
+    <textarea id="chat-user" rows="2">用一句话介绍你自己</textarea>
+    <div class="checkline">
+      <label><input type="checkbox" id="chat-stream"> 流式 stream</label>
+      <label><input type="checkbox" id="chat-structured" onchange="toggleBlock('schema-block', this.checked)"> 结构化 response_format</label>
+      <label><input type="checkbox" id="chat-prompt-on" onchange="toggleBlock('prompt-block', this.checked)"> 模板 gateway_prompt</label>
+    </div>
+    <div id="schema-block" style="display: none">
+      <label>JSON Schema</label>
+      <textarea id="chat-schema" rows="4">{"type": "object", "properties": {"reply": {"type": "string"}}, "required": ["reply"]}</textarea>
+    </div>
+    <div id="prompt-block" style="display: none">
+      <div class="row">
+        <div><label>模板名</label><input type="text" id="p-name" value="agent_code_reviewer"></div>
+        <div><label>版本</label><input type="text" id="p-version" value="v1"></div>
+      </div>
+      <label>variables（JSON）</label>
+      <textarea id="p-vars" rows="4">{"language": "python", "project_type": "LLM Gateway", "focus_areas": "安全", "strictness_level": "P2", "source_code": "def add(a, b): return a + b", "focus_security": "true", "focus_reliability": "", "focus_cost": "", "focus_observability": ""}</textarea>
+    </div>
+    <div class="row" style="margin-top: 10px"><button id="chat-send" onclick="sendChat()">发送</button></div>
+    <div class="result"><div class="status" id="chat-status"></div><div class="body" id="chat-body"></div></div>
+  </section>
+
+  <!-- ============ Responses ============ -->
+  <section class="panel">
+    <h2><span class="method post">POST</span>Responses /v1/responses（会话续接）</h2>
+    <div class="row">
+      <div><label>档位 model</label><select id="resp-mode" style="width: 100%"><option>smart</option><option>fast</option></select></div>
+      <div><label>previous_response_id（可选）</label>
+        <div style="display: flex; gap: 6px">
+          <input type="text" id="resp-prev" placeholder="留空 = 新会话" style="flex: 1">
+          <button class="secondary" style="flex: none" onclick="$('resp-prev').value = lastResponseId || ''">上次</button>
+        </div>
+      </div>
+    </div>
+    <label>input</label>
+    <textarea id="resp-input" rows="2">我叫小明，记住这个名字</textarea>
+    <div class="checkline"><label><input type="checkbox" id="resp-stream"> 流式（类型化事件）</label></div>
+    <div class="row"><button id="resp-send" onclick="sendResponses()">发送</button></div>
+    <div class="result"><div class="status" id="resp-status"></div><div class="body" id="resp-body"></div></div>
+    <div class="hint">多轮测试：先发「我叫小明…」，再把返回的 id 填入 previous_response_id，问「我叫什么」。</div>
+  </section>
+
+  <!-- ============ Prompts ============ -->
+  <section class="panel">
+    <h2><span class="method get">GET</span><span class="method post">POST</span>模板 /v1/prompts</h2>
+    <div class="row"><button class="secondary" onclick="loadPrompts()">刷新模板列表</button></div>
+    <div id="prompt-list" class="hint">点击版本填入下方渲染区</div>
+    <label>渲染预览变量（JSON）</label>
+    <textarea id="render-vars" rows="3">{"language": "python", "source_code": "print(1)"}</textarea>
+    <div class="row" style="margin-top: 8px"><button class="secondary" onclick="renderPrompt()">渲染预览</button></div>
+    <div class="result"><div class="status" id="prompt-status"></div><div class="body" id="prompt-body"></div></div>
+  </section>
+
+  <!-- ============ 错误场景 ============ -->
+  <section class="panel">
+    <h2>错误场景断言（错误码分段，ADR 0010）</h2>
+    <div class="row">
+      <button class="secondary" onclick="runNegative()">一键跑全部</button>
+    </div>
+    <table id="negative-table" style="margin-top: 8px">
+      <tr><th>场景</th><th>预期</th><th>实际</th><th>结果</th></tr></table>
+    <div class="verdict" id="negative-verdict"></div>
+  </section>
+
+  <!-- ============ Traces（置底并占满整行：审计列多，需要完整宽度） ============ -->
+  <section class="panel wide">
+    <h2><span class="method get">GET</span>调用审计 /v1/traces</h2>
+    <div class="row">
+      <div style="flex: 0 0 90px"><label>limit</label><input type="number" id="trace-limit" value="20" min="1" max="1000"></div>
+      <div style="flex: 0 0 90px"><label>offset</label><input type="number" id="trace-offset" value="0" min="0"></div>
+      <div style="flex: 1"><label>&nbsp;</label><button class="secondary" onclick="loadTraces()" style="width: 100%">查询</button></div>
+    </div>
+    <div style="overflow: auto; margin-top: 8px; max-height: 340px"><table id="trace-table"></table></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const authHeaders = () => ({ "Authorization": "Bearer " + $("bearer").value.trim() });
+const jsonHeaders = () => ({ "Content-Type": "application/json", ...authHeaders() });
+let lastResponseId = "";
+
+function toggleBlock(id, on) { $(id).style.display = on ? "block" : "none"; }
+
+function setStatus(id, code, ms) {
+  const cls = (code >= 200 && code < 300) ? "code-ok" : "code-bad";
+  $(id).innerHTML = `HTTP <span class="${cls}">${code}</span> · ${ms} ms`;
+}
+function showBody(id, text) { const el = $(id); el.style.display = "block"; el.classList.add("stream"); el.textContent = text; }
+function appendBody(id, text) { const el = $(id); el.style.display = "block"; el.classList.add("stream"); el.textContent += text; }
+
+async function timed(fetcher, statusId, bodyId) {
+  const t0 = performance.now();
+  try {
+    const res = await fetcher();
+    const ms = Math.round(performance.now() - t0);
+    setStatus(statusId, res.status, ms);
+    return res;
+  } catch (e) {
+    setStatus(statusId, 0, Math.round(performance.now() - t0));
+    showBody(bodyId, "网络错误: " + e.message);
+    return null;
+  }
+}
+
+// 解析 SSE 流：按 "data: " 行切分，chat 末行 [DONE]
+async function readSSE(res, onEvent, onDone) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const parts = buf.split("\n\n");
+    buf = parts.pop();
+    for (const part of parts) {
+      const line = part.trim();
+      if (!line.startsWith("data: ")) continue;
+      const payload = line.slice(6);
+      if (payload === "[DONE]") { onDone && onDone(); return; }
+      try { onEvent(JSON.parse(payload)); } catch { /* 跳过不完整块 */ }
+    }
+  }
+  onDone && onDone();
+}
+
+// ---------- 服务状态 ----------
+async function checkHealth() {
+  const res = await timed(() => fetch("/healthz"), "health-status", "health-body");
+  if (res) showBody("health-body", JSON.stringify(await res.json(), null, 2));
+}
+
+async function loadModels() {
+  const res = await timed(() => fetch("/v1/models", { headers: authHeaders() }), "health-status", "health-body");
+  if (!res) return;
+  const data = await res.json();
+  showBody("health-body", JSON.stringify(data, null, 2));
+  const modes = (data.data || []).map(m => m.id);
+  for (const sel of [$("chat-mode"), $("resp-mode")]) {
+    const keep = sel.value;
+    sel.innerHTML = modes.map(m => `<option>${m}</option>`).join("");
+    if (modes.includes(keep)) sel.value = keep;
+  }
+  const table = $("routes-table");
+  table.style.display = "";
+  let html = "<tr><th>档位</th><th>路由目标</th><th>权重</th><th>状态</th><th>健康</th><th>失败数</th></tr>";
+  for (const [mode, routes] of Object.entries(data.gateway_routes || {})) {
+    for (const r of routes) {
+      const healthy = r.healthy ? '<span class="tag ok">healthy</span>' : '<span class="tag bad">open</span>';
+      html += `<tr><td>${mode}</td><td>${r.target}</td><td>${r.weight}</td><td>${r.state}</td><td>${healthy}</td><td>${r.failures}</td></tr>`;
+    }
+  }
+  table.innerHTML = html;
+}
+
+// ---------- Chat Completions ----------
+async function sendChat() {
+  const btn = $("chat-send"); btn.disabled = true;
+  $("chat-body").textContent = "";
+  const messages = [];
+  if ($("chat-system").value.trim()) messages.push({ role: "system", content: $("chat-system").value.trim() });
+  messages.push({ role: "user", content: $("chat-user").value });
+  const body = { model: $("chat-mode").value, messages, stream: $("chat-stream").checked };
+  if ($("chat-structured").checked) {
+    body.response_format = { type: "json_schema", json_schema: { name: "reply_schema", schema: JSON.parse($("chat-schema").value) } };
+  }
+  if ($("chat-prompt-on").checked) {
+    body.gateway_prompt = { name: $("p-name").value.trim(), version: $("p-version").value.trim(), variables: JSON.parse($("p-vars").value || "{}") };
+  }
+  const fetcher = () => fetch("/v1/chat/completions", { method: "POST", headers: jsonHeaders(), body: JSON.stringify(body) });
+  const res = await timed(fetcher, "chat-status", "chat-body");
+  if (!res) { btn.disabled = false; return; }
+
+  if (body.stream) {
+    let firstAt = null, text = "";
+    await readSSE(res,
+      (ev) => {
+        firstAt ??= performance.now();
+        const delta = ev.choices?.[0]?.delta?.content;
+        if (delta) { text += delta; appendBody("chat-body", delta); }
+        else if (ev.usage) appendBody("chat-body", `\n[usage] in=${ev.usage.prompt_tokens} out=${ev.usage.completion_tokens}`);
+      },
+      () => { if (!text) showBody("chat-body", "（无内容增量）"); });
+  } else {
+    const data = await res.json();
+    const lines = [];
+    if (data.error) lines.push(JSON.stringify(data, null, 2));
+    else {
+      lines.push(data.choices?.[0]?.message?.content ?? "");
+      if (data.parsed !== undefined && data.parsed !== null) lines.push("\n[parsed] " + JSON.stringify(data.parsed));
+      lines.push(`\n[meta] finish=${data.choices?.[0]?.finish_reason} attempts=${data.attempts} in=${data.usage?.prompt_tokens} out=${data.usage?.completion_tokens}`);
+    }
+    showBody("chat-body", lines.join("\n"));
+  }
+  btn.disabled = false;
+}
+
+// ---------- Responses ----------
+async function sendResponses() {
+  const btn = $("resp-send"); btn.disabled = true;
+  $("resp-body").textContent = "";
+  const body = { model: $("resp-mode").value, input: $("resp-input").value, stream: $("resp-stream").checked };
+  const prev = $("resp-prev").value.trim();
+  if (prev) body.previous_response_id = prev;
+  const fetcher = () => fetch("/v1/responses", { method: "POST", headers: jsonHeaders(), body: JSON.stringify(body) });
+  const res = await timed(fetcher, "resp-status", "resp-body");
+  if (!res) { btn.disabled = false; return; }
+
+  if (body.stream) {
+    let text = "";
+    await readSSE(res, (ev) => {
+      if (ev.type === "response.output_text.delta") { text += ev.delta; appendBody("resp-body", ev.delta); }
+      else if (ev.type === "response.completed") {
+        lastResponseId = ev.response?.id ?? lastResponseId;
+        appendBody("resp-body", `\n[completed] id=${ev.response?.id} in=${ev.response?.usage?.input_tokens} out=${ev.response?.usage?.output_tokens}`);
+      } else if (ev.type === "response.failed") {
+        appendBody("resp-body", "\n[failed] " + JSON.stringify(ev.response?.error));
+      }
+    });
+  } else {
+    const data = await res.json();
+    if (data.error) showBody("resp-body", JSON.stringify(data, null, 2));
+    else {
+      lastResponseId = data.id;
+      showBody("resp-body", respText(data) + `\n\n[meta] id=${data.id} status=${data.status} in=${data.usage?.input_tokens} out=${data.usage?.output_tokens}`);
+    }
+  }
+  btn.disabled = false;
+}
+
+// 从原始 Responses JSON 提取回复文本：output[].content[].text
+// （注意 output_text 是 openai SDK 的便捷属性，原始 JSON 里不存在）
+function respText(data) {
+  if (typeof data.output_text === "string") return data.output_text;
+  return (data.output || [])
+    .filter(item => item.type === "message")
+    .flatMap(item => item.content || [])
+    .filter(c => c.type === "output_text")
+    .map(c => c.text)
+    .join("");
+}
+
+// ---------- Traces ----------
+// 存储统一 UTC（ISO 带 Z），展示层转为浏览器本地时区的完整时间
+function localTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || "-";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+async function loadTraces() {
+  const res = await fetch(`/v1/traces?limit=${$("trace-limit").value}&offset=${$("trace-offset").value}`, { headers: authHeaders() });
+  const traces = await res.json();
+  let html = "<tr><th>本地时间</th><th>endpoint</th><th>requested→actual</th><th>tokens(in/out/cached)</th><th>ttft</th><th>latency</th><th>cost</th><th>status</th><th>error</th></tr>";
+  for (const t of traces) {
+    const st = t.status === "success" ? "ok" : (t.status === "failed" ? "bad" : "gray");
+    html += `<tr><td>${localTime(t.timestamp)}</td><td>${t.endpoint}</td><td>${t.requested_model}→${t.actual_model ?? "-"}</td>` +
+      `<td>${t.input_tokens}/${t.output_tokens}/${t.cached_tokens}</td><td>${t.ttft_ms ?? "-"}</td><td>${t.latency_ms}ms</td>` +
+      `<td>$${(t.cost_usd ?? 0).toFixed(5)}</td><td><span class="tag ${st}">${t.status}</span></td><td>${t.error_code ?? ""}</td></tr>`;
+  }
+  $("trace-table").innerHTML = html || "<tr><td>（空）</td></tr>";
+}
+
+// ---------- Prompts ----------
+let promptCache = [];
+async function loadPrompts() {
+  const res = await fetch("/v1/prompts", { headers: authHeaders() });
+  promptCache = await res.json();
+  const groups = {};
+  for (const p of promptCache) (groups[p.name] ??= []).push(p.version);
+  let html = "";
+  for (const [name, versions] of Object.entries(groups)) {
+    html += `<div style="margin: 4px 0"><b>${name}</b> `;
+    for (const v of versions) html += `<span class="chip" onclick="pickPrompt('${name}', '${v}')">${v}</span>`;
+    html += "</div>";
+  }
+  $("prompt-list").innerHTML = html || "（无模板）";
+}
+function pickPrompt(name, version) {
+  document.querySelectorAll("#prompt-list .chip").forEach(c => c.classList.remove("active"));
+  event.target.classList.add("active");
+  $("p-name").value = name; $("p-version").value = version;
+}
+async function renderPrompt() {
+  const name = $("p-name").value.trim(), version = $("p-version").value.trim();
+  const res = await timed(() => fetch(`/v1/prompts/${name}/${version}/render`, {
+    method: "POST", headers: jsonHeaders(), body: JSON.stringify({ variables: JSON.parse($("render-vars").value || "{}") }),
+  }), "prompt-status", "prompt-body");
+  if (res) showBody("prompt-body", JSON.stringify(await res.json(), null, 2));
+}
+
+// ---------- 错误场景断言 ----------
+async function expect(name, expectedCode, expectedStatus, fetcher) {
+  const res = await fetcher();
+  let actual = `${res.status}`, code = "";
+  try {
+    const body = await res.clone().json();
+    code = body?.error?.code ?? "";
+    if (code) actual += ` ${code}`;
+  } catch { /* 非 JSON */ }
+  const pass = res.status === expectedStatus && (code === "" || code === expectedCode);
+  return { name, expected: `${expectedStatus} ${expectedCode}`, actual, pass };
+}
+async function runNegative() {
+  const rows = [];
+  rows.push(await expect("未知档位", "route.unknown_mode", 400,
+    () => fetch("/v1/chat/completions", { method: "POST", headers: jsonHeaders(), body: JSON.stringify({ model: "gpt-4o", messages: [{ role: "user", content: "hi" }] }) })));
+  rows.push(await expect("无效 apikey", "auth.invalid_key", 401,
+    () => fetch("/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer bad-key" }, body: JSON.stringify({ model: "fast", messages: [{ role: "user", content: "hi" }] }) })));
+  rows.push(await expect("空 messages", "request.validation_error", 422,
+    () => fetch("/v1/chat/completions", { method: "POST", headers: jsonHeaders(), body: JSON.stringify({ model: "fast", messages: [] }) })));
+  rows.push(await expect("未知模板版本", "prompt.unknown_template", 400,
+    () => fetch("/v1/prompts/no-such-tpl/v9/render", { method: "POST", headers: jsonHeaders(), body: JSON.stringify({ variables: {} }) })));
+  const table = $("negative-table");
+  table.innerHTML = "<tr><th>场景</th><th>预期</th><th>实际</th><th>结果</th></tr>" +
+    rows.map(r => `<tr><td>${r.name}</td><td>${r.expected}</td><td>${r.actual}</td><td>${r.pass ? "✅" : "❌"}</td></tr>`).join("");
+  const passAll = rows.every(r => r.pass);
+  const v = $("negative-verdict");
+  v.className = passAll ? "ok" : "bad";
+  v.textContent = passAll ? "全部通过 ✅（分段错误码与 HTTP 状态均符合预期）" : "存在不符合预期的场景，见上表 ❌";
+}
+
+// 初始化
+checkHealth();
+loadModels();
+loadTraces();
+loadPrompts();
+</script>
+</body>
+</html>
