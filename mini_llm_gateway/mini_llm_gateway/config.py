@@ -112,7 +112,7 @@ class ResolvedTarget(BaseModel):
     # 路由决策产物：路由目标 + 协议端点连接信息合一，供供应商适配层与成本计算使用。
     provider: str
     provider_model: str
-    key: str  # 供应商/模型，对外即 actual_model
+    key: str  # 供应商/模型，即 trace 里的 actual_model（不对外透出，ADR 0015）
     protocol: Literal["openai", "anthropic", "responses"] = "openai"
     base_url: str
     api_key_env: str

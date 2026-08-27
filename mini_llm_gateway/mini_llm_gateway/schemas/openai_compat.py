@@ -64,8 +64,7 @@ class ChatCompletionResponse(BaseModel):
     id: str
     object: str = "chat.completion"
     created: int
-    model: str  # requested_model（档位名，见 ADR 0004）
-    actual_model: str  # 扩展字段：实际命中的路由目标 供应商/模型
+    model: str  # requested_model（档位名，见 ADR 0004）；路由目标不对外透出，仅记入 Trace（ADR 0015）
     choices: list[ChatChoice]
     usage: ChatUsage
 
@@ -115,15 +114,14 @@ def _extract_response_schema(response_format: dict[str, Any] | None) -> dict[str
     return None  # text 等价于默认自由文本
 
 
-def to_chat_completion(request_id: str, requested_model: str, actual_model: str, content: str,
+def to_chat_completion(request_id: str, requested_model: str, content: str,
                        input_tokens: int, output_tokens: int, finish_reason: str = "stop") -> ChatCompletionResponse:
-    # 内部结果 → OpenAI chat.completion 响应；model 回显档位名，actual_model 透出路由目标。
+    # 内部结果 → OpenAI chat.completion 响应；model 回显档位名（ADR 0004），路由目标不出响应体。
     # content_filter（安全拒答）按 OpenAI 方言透传：200 + finish_reason（ADR 0010）。
     return ChatCompletionResponse(
         id=f"chatcmpl-{request_id}",
         created=int(time.time()),
         model=requested_model,
-        actual_model=actual_model,
         choices=[ChatChoice(message=ChatMessageOut(content=content), finish_reason=finish_reason)],
         usage=ChatUsage(
             prompt_tokens=input_tokens,

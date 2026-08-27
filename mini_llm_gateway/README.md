@@ -43,6 +43,7 @@ cp .env.example .env && docker compose up -d   # SQLite 持久化在 ./data
 | GET/POST | `/v1/prompts` | 模板列表 / 创建新版本（写需 `X-Admin-Token`） |
 | POST | `/v1/prompts/{name}/{version}/render` | 渲染预览 |
 | GET | `/admin` | 模板管理页面 |
+| GET | `/playground` | 接口测试台（全端点联调：流式/结构化/续接/trace/错误场景断言） |
 | GET | `/healthz` | 健康检查（docker-compose healthcheck 使用，不进 /docs） |
 
 错误统一 OpenAI 格式：`{"error": {"message", "type", "param", "code"}}`；**code 为点分分段码 `<段>.<码>`**（ADR 0010），段决定重试语义：
@@ -83,7 +84,7 @@ cp .env.example .env && docker compose up -d   # SQLite 持久化在 ./data
 
 ## 档位路由（model 字段语义）与双协议适配
 
-**model 字段只接受档位名**（`fast` / `smart`，config.yaml 可扩展），传具体模型名（如 `gpt-4o`）返回 400 `unknown_mode`。响应 `model` 回显档位名，实际命中的路由目标在扩展字段 `actual_model`（格式 `供应商/模型`，如 `deepseek-anthropic/deepseek-v4-flash`）。
+**model 字段只接受档位名**（`fast` / `smart`，config.yaml 可扩展），传具体模型名（如 `gpt-4o`）返回 400 `unknown_mode`。响应 `model` 回显档位名；实际命中的路由目标（`供应商/模型`，如 `deepseek-anthropic/deepseek-v4-flash`）**不在响应中透出**（ADR 0015），仅记入 Trace，经 `/v1/traces` 审计可查。
 
 **协议适配发生在档位内部**（ADR 0013）：路由目标经 `providers.*.protocol` 绑定协议适配器——fast 档 V4-Flash 走 Anthropic Messages 端点（`https://api.deepseek.com/anthropic`）、smart 档 V4-Pro 走 OpenAI Responses 端点，两个连接共用同一 API Key；鉴权头、请求体、返回格式与流事件的差异全部封装在适配器内，对上面两层不可见。
 
@@ -102,7 +103,7 @@ client = OpenAI(base_url="http://127.0.0.1:8000/v1", api_key="replace-with-a-lon
 
 # 非流式
 completion = client.chat.completions.create(model="fast", messages=[...])
-print(completion.choices[0].message.content, completion.actual_model)
+print(completion.choices[0].message.content, completion.model)
 
 # 流式（chat.completion.chunk + [DONE]）
 for chunk in client.chat.completions.create(model="fast", messages=[...], stream=True):

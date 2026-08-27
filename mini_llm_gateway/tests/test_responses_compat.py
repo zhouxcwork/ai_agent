@@ -14,7 +14,7 @@ async def test_sdk_responses_create(sdk, fake_provider):
     assert response.status == "completed"
     assert response.output_text == "这是回答"
     assert response.model == "fast"
-    assert response.actual_model == PRIMARY_KEY
+    assert "actual_model" not in response.model_dump()  # 路由目标不对外透出（ADR 0015）
     assert response.id.startswith("resp-")
     assert response.usage.total_tokens == 15
 
@@ -115,7 +115,7 @@ async def test_sdk_responses_stream_events(sdk, fake_provider):
     assert completed.status == "completed"
     assert completed.output_text == "你好"
     assert completed.model == "fast"
-    assert completed.actual_model == PRIMARY_KEY
+    assert "actual_model" not in completed.model_dump()
 
 
 async def test_sdk_responses_stream_failed(sdk, fake_provider):

@@ -85,8 +85,8 @@ function showMessage(text, ok) {
 function clearMessage() { $("message").className = ""; }
 async function api(path, options = {}) {
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.message ? `${body.code || res.status}: ${body.message}` : `HTTP ${res.status}`);

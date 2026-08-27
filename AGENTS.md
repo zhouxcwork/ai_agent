@@ -47,7 +47,7 @@ config.py   config.yaml → GatewayConfig
 
 - 依赖方向：api → service → provider/repository；service 不 import fastapi、不感知任何 OpenAI 方言与供应商 SDK 异常（openai 异常在 provider 适配层翻译为 RetryableUpstreamError）
 - 端点：`POST /v1/chat/completions`（chunk 流式）、`POST /v1/responses`（事件流式 + 会话续接）、`GET /v1/models`（档位 + 健康状态）、`GET /v1/traces`、`GET|POST /v1/prompts`、`GET /admin`
-- **档位路由**：model 字段只收档位名（fast/smart），响应 model=档位、actual_model=供应商/模型（ADR 0007）
+- **档位路由**：model 字段只收档位名（fast/smart），响应 model=档位；actual_model 不对外透出、仅记入 Trace（ADR 0007/0015）
 - **model 字段回显 requested 而非实际目标**是刻意决定（ADR 0004），不要"修复"成 OpenAI 语义
 - 测试通过 `create_app(config, provider)` 注入 FakeProvider（见 tests/conftest.py）；openai SDK 经 ASGI transport 直连做集成测试
 

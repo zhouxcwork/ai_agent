@@ -57,7 +57,7 @@ def test_circuit_trips_and_traffic_shifts(tmp_path, fake_provider, monkeypatch):
             "/v1/chat/completions",
             json={"model": "fast", "messages": [{"role": "user", "content": "hi"}]},
         ).json()
-        assert body["actual_model"] == BACKUP_KEY
+        assert "actual_model" not in body  # 路由目标不对外透出（ADR 0015）
 
         # trace 记录的 fallback 事实
         traces = client.get("/v1/traces").json()
@@ -82,7 +82,7 @@ def test_circuit_recovers_via_half_open(tmp_path, fake_provider, monkeypatch):
             "/v1/chat/completions",
             json={"model": "fast", "messages": [{"role": "user", "content": "hi"}]},
         ).json()
-        assert body["actual_model"] == PRIMARY_KEY  # 半开试探成功 → 恢复
+        assert "actual_model" not in body  # 半开试探成功 → 恢复由下方 state=closed 证明
 
         routes = {r["target"]: r for r in client.get("/v1/models").json()["gateway_routes"]["fast"]}
         assert routes[PRIMARY_KEY]["state"] == "closed"

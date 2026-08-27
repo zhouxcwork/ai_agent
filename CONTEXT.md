@@ -23,7 +23,7 @@ _Avoid_: provider_model 之外的"真实模型"等说法
 _Avoid_: 请求别名、model
 
 **actual_model（实际模型）**:
-单次调用中网关实际选中的路由目标（`供应商/模型`）；fallback 后与 requested_model 必然不同，以扩展字段返回并记入 Trace。
+单次调用中网关实际选中的路由目标（`供应商/模型`）；fallback 后与 requested_model 必然不同。仅记入 Trace 供审计，不在任何对外响应体中透出（ADR 0015）。
 _Avoid_: resolved_model、真实模型
 
 **Fallback（候选切换）**:

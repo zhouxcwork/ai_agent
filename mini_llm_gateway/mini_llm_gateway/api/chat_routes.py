@@ -46,7 +46,6 @@ async def chat_completions(
     body = to_chat_completion(
         request_id=response.request_id,
         requested_model=request.model,
-        actual_model=response.model,
         content=response.content,
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
@@ -66,7 +65,6 @@ async def _chunk_stream(gateway: Any, request: LLMRequest) -> AsyncIterator[str]
             "object": "chat.completion.chunk",
             "created": created,
             "model": request.model,
-            "actual_model": event.get("model"),
         }
         if event["type"] == "content.delta":
             delta: dict[str, Any] = {"content": event["delta"]}

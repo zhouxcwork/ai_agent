@@ -4,7 +4,7 @@ import pytest
 import openai
 from openai import BadRequestError
 
-from tests.conftest import BACKUP_KEY, BACKUP_MODEL, PRIMARY_KEY, PRIMARY_MODEL
+from tests.conftest import BACKUP_MODEL, PRIMARY_KEY, PRIMARY_MODEL
 
 async def test_sdk_chat_completion_roundtrip(sdk, fake_provider):
     fake_provider.contents = {PRIMARY_MODEL: "你好，世界"}
@@ -15,7 +15,7 @@ async def test_sdk_chat_completion_roundtrip(sdk, fake_provider):
     assert completion.choices[0].message.content == "你好，世界"
     assert completion.choices[0].finish_reason == "stop"
     assert completion.model == "fast"  # requested_model（档位名）
-    assert completion.actual_model == PRIMARY_KEY  # 扩展字段：路由目标
+    assert "actual_model" not in completion.model_dump()  # 路由目标不对外透出（ADR 0015）
     assert completion.usage.total_tokens == 15
     assert completion.id.startswith("chatcmpl-")
 
@@ -125,7 +125,7 @@ async def test_sdk_chat_stream_chunks(sdk, fake_provider):
     assert [c for c in chunks if c.choices][-1].choices[0].finish_reason == "stop"
     assert {c.id for c in chunks} == {chunks[0].id}  # 全流 id 一致
     assert chunks[0].model == "fast"
-    assert chunks[0].actual_model == PRIMARY_KEY
+    assert "actual_model" not in chunks[0].model_dump()
 
 
 async def test_sdk_chat_stream_fallback_before_first_chunk(sdk, fake_provider):
@@ -135,8 +135,7 @@ async def test_sdk_chat_stream_fallback_before_first_chunk(sdk, fake_provider):
     )
     chunks = [chunk async for chunk in stream]
     text = "".join(c.choices[0].delta.content or "" for c in chunks if c.choices)
-    assert text == "你好"  # 首块前切换目标，调用方拿到完整文本
-    assert chunks[0].actual_model == BACKUP_KEY
+    assert text == "你好"  # 首块前切换目标，调用方拿到完整文本；切换事实只记 Trace
 
 
 async def test_sdk_chat_stream_all_failed(sdk, fake_provider):

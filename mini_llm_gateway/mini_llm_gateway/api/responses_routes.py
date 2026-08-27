@@ -74,7 +74,6 @@ async def create_response(
     body = to_response_object(
         request_id=response.request_id,
         requested_model=request.model,
-        actual_model=response.model,
         content=response.content,
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
@@ -90,7 +89,7 @@ async def _event_stream(
     # 无 [DONE]（Responses 协议无此标记）；completed 携带完整 response 对象。
     created_at = int(time.time())
     text_parts: list[str] = []
-    stream_state: dict[str, Any] = {"request_id": "", "model": None, "usage": None}
+    stream_state: dict[str, Any] = {"request_id": "", "usage": None}
 
     def response_skeleton(
         status: str, output_text: str = "", error: dict[str, Any] | None = None, finish_reason: str = "stop"
@@ -102,7 +101,6 @@ async def _event_stream(
             "object": "response",
             "created_at": created_at,
             "model": request.model,
-            "actual_model": stream_state["model"],
             "status": "incomplete" if finish_reason == "content_filter" else status,
             "output": []
             if not output_text
@@ -128,7 +126,6 @@ async def _event_stream(
     async for event in gateway.stream(request, endpoint=ENDPOINT):
         stream_state["request_id"] = event.get("request_id", stream_state["request_id"])
         if event["type"] == "content.delta":
-            stream_state["model"] = event.get("model", stream_state["model"])
             if not text_parts:
                 yield _sse({"type": "response.created", "response": response_skeleton("in_progress")})
             text_parts.append(event["delta"])
@@ -145,7 +142,6 @@ async def _event_stream(
             if not text_parts:
                 yield _sse({"type": "response.created", "response": response_skeleton("in_progress")})
             output_text = "".join(text_parts)
-            stream_state["model"] = event.get("model", stream_state["model"])
             stream_state["usage"] = event.get("usage")
             if store:
                 usage = event.get("usage") or {"input_tokens": 0, "output_tokens": 0}

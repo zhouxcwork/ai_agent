@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from html import escape as html_escape
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, HTMLResponse
 
 from mini_llm_gateway import __version__
 from mini_llm_gateway.api import chat_routes, model_routes, prompt_routes, responses_routes, trace_routes
@@ -30,6 +33,8 @@ SEED_TEMPLATES: list[tuple[str, str, str]] = [
     # (name, version, 包内种子文件路径)：启动时若不存在则写入，保证开箱即用。
     ("agent_code_reviewer", "v1", "seeds/agent_code_reviewer.jinja2"),
 ]
+
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def _seed_file(relative_path: str) -> str:
@@ -90,5 +95,17 @@ def create_app(config: GatewayConfig | None = None, provider: Provider | None = 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/playground", include_in_schema=False)
+    async def playground_page() -> HTMLResponse:
+        # 接口测试台：静态单页，服务端注入默认凭据（Bearer 取白名单首个 key，Admin Token 取
+        # 环境变量），本地联调免手填；密钥只落在本机页面里，不额外暴露端点。
+        html = (_STATIC_DIR / "playground.html").read_text(encoding="utf-8")
+        bearer = next(iter(gateway_config.auth.api_keys), "")
+        admin_token = os.environ.get(gateway_config.admin.token_env, "")
+        html = html.replace("__BEARER_DEFAULT__", html_escape(bearer)).replace(
+            "__ADMIN_TOKEN_DEFAULT__", html_escape(admin_token)
+        )
+        return HTMLResponse(html)
 
     return app

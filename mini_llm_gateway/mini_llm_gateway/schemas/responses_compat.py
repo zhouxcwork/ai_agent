@@ -79,8 +79,7 @@ class ResponseObject(BaseModel):
     id: str
     object: str = "response"
     created_at: int
-    model: str  # requested_model（档位名）
-    actual_model: str  # 扩展字段：路由目标
+    model: str  # requested_model（档位名）；路由目标不对外透出，仅记入 Trace（ADR 0015）
     status: str = "completed"
     incomplete_details: dict[str, str] | None = None  # status=incomplete 时的原因（如 content_filter）
     output: list[OutputMessage]
@@ -149,7 +148,7 @@ def _flatten_content(content: str | list[ResponseContentBlock]) -> str:
 
 
 def to_response_object(
-    request_id: str, requested_model: str, actual_model: str, content: str,
+    request_id: str, requested_model: str, content: str,
     input_tokens: int, output_tokens: int, finish_reason: str = "stop",
 ) -> ResponseObject:
     # 内部结果 → OpenAI response 对象；usage 用 responses 协议字段名。
@@ -159,7 +158,6 @@ def to_response_object(
         id=f"resp-{request_id}",
         created_at=int(time.time()),
         model=requested_model,
-        actual_model=actual_model,
         status="incomplete" if refused else "completed",
         incomplete_details={"reason": "content_filter"} if refused else None,
         output=[OutputMessage(id=f"msg-{request_id}", content=[OutputTextContent(text=content)])],

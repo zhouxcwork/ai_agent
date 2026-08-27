@@ -28,7 +28,7 @@ def test_fallback_records_actual_target_in_trace(client, fake_provider):
         json={"model": "fast", "messages": [{"role": "user", "content": "hi"}]},
     )
     assert response.status_code == 200
-    assert response.json()["actual_model"] == BACKUP_KEY
+    assert "actual_model" not in response.json()  # 路由目标不对外透出（ADR 0015）
     trace = client.get("/v1/traces").json()[0]
     assert trace["status"] == "success"
     assert trace["actual_model"] == BACKUP_KEY

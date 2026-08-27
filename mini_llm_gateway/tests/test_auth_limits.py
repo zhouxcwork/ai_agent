@@ -76,13 +76,13 @@ async def test_tenant_concurrency_limit_rejects_second(tmp_path, fake_provider):
 
 
 def test_target_busy_skips_to_next_candidate(tmp_path, fake_provider):
-    # 主选路由目标并发占满：请求跳过它，由下一候选承接（actual_model 切换）
+    # 主选路由目标并发占满：请求跳过它，由下一候选承接（路由目标切换只记 Trace，不透出响应）
     limits = LimitsConfig(targets={PRIMARY_KEY: TargetLimitConfig(max_concurrency=1)})
     with _client(tmp_path, fake_provider, limits=limits) as client:
         assert client.app.state.limiter.try_acquire_target(PRIMARY_KEY)  # 手动占住唯一槽位
         response = client.post("/v1/chat/completions", json=BODY)
         assert response.status_code == 200
-        assert response.json()["actual_model"] == BACKUP_KEY
+        assert "actual_model" not in response.json()
         assert fake_provider.complete_calls == ["backup-model"]
 
 
@@ -148,4 +148,4 @@ def test_target_limits_isolate_models_of_same_provider(tmp_path, fake_provider):
             "/v1/chat/completions", json={"model": "smart", "messages": [{"role": "user", "content": "hi"}]}
         )
         assert isolated.status_code == 200
-        assert isolated.json()["actual_model"] == "p1/pro-model"
+        assert any(t["actual_model"] == "p1/pro-model" for t in client.get("/v1/traces").json())
