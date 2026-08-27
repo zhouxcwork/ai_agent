@@ -272,17 +272,21 @@ def verify(gw: Gateway, offline: bool) -> None:
         return f"attempts=3（初次+2次重试）latency={t['latency_ms']}ms（含 0.2+0.4s 指数退避）"
 
     def rate_limit():
-        # 并发爆发触发租户资源边界（burst=40/并发=10）：请求打满后 429 快速拒绝（零上游成本）
+        # 按模型独立限流（ADR 0011 目标级边界，config：smart 目标 qps=5/并发=10）：
+        # 并发爆发打向 smart 档 → 超出目标 QPS 桶的请求被 429 resource.target_busy 拒绝；
+        # 同一时刻 fast 目标（另一模型）仍正常 → 证明同供应商不同模型互不挤占。
         import concurrent.futures
 
-        def fire(_):
+        def fire(mode, payload_extra=None):
+            body = {"model": mode, "messages": [{"role": "user", "content": "hi"}]}
+            if payload_extra:
+                body |= payload_extra
             req = urllib.request.Request(
                 gw.base_url + "/v1/chat/completions",
-                data=json.dumps({"model": "no-such-mode", "messages": [{"role": "user", "content": "x"}]}).encode(),
-                headers=gw.auth, method="POST",
+                data=json.dumps(body).encode(), headers=gw.auth, method="POST",
             )
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
+                with urllib.request.urlopen(req, timeout=90) as resp:
                     return resp.status, ""
             except urllib.error.HTTPError as e:
                 try:
@@ -290,11 +294,15 @@ def verify(gw: Gateway, offline: bool) -> None:
                 except Exception:  # noqa: BLE001
                     return e.code, ""
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=45) as ex:
-            results = list(ex.map(fire, range(45)))
-        limited = [code for s, code in results if s == 429 and code.startswith("resource.")]
-        assert limited, f"45 并发应触发限流 429，实际: {results[:5]}"
-        return f"45 并发中 {len(limited)} 个 429（首见 {limited[0]}）"
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+            results = list(ex.map(lambda _: fire("smart", {"timeout_seconds": 60}), range(12)))
+        target_limited = [code for s, code in results if s == 429 and code == "resource.target_busy"]
+        assert target_limited, f"smart 目标超限应 429 target_busy，实际: {results}"
+        # 对照：同一时刻另一模型（fast 档）不受 smart 目标限流影响
+        status, code = fire("fast")
+        assert status == 200, f"fast 目标应不受 smart 限流影响: status={status} code={code}"
+        n_429 = sum(1 for s, _ in results if s == 429)
+        return f"12 并发打 smart：{n_429} 个 429（含 target_busy {len(target_limited)}），同期 fast 正常 200"
 
     print("\n== 真实上游调用（需服务端 DEEPSEEK_API_KEY）==")
     check("Chat 非流式 fast（Anthropic 协议路径）", lambda: chat("fast"))
@@ -306,7 +314,7 @@ def verify(gw: Gateway, offline: bool) -> None:
     check("Responses 流式（类型化事件链）", responses_stream)
     check("Trace 审计（token 分类/TTFT/cost/状态字段齐全）", traces)
     check("指数退避重试（1s 超时 → 3 次尝试耗尽 503）", retry_exhaustion)
-    check("限流 429（并发爆发触发租户资源边界）", rate_limit)
+    check("按模型限流 429（目标级边界，模型间独立）", rate_limit)
 
 
 def main() -> int:

@@ -39,12 +39,8 @@ class ModelRouter:
     def candidates(
         self, mode: str, *, structured: bool = False, request_id: str | None = None
     ) -> list[ResolvedTarget]:
+        mode = self.resolve_mode(mode)  # 档位别名（供应商模型名）兼容
         mode_config = self.config.modes.get(mode)
-        if mode_config is None:
-            # 档位别名兼容：传入候选池中的供应商模型名时映射到所属档位（模型唯一属于一个档位；
-            # 若多档位共用同名模型，取配置顺序第一个）。档位仍是主推语义（ADR 0007）。
-            mode = self._mode_of_model(mode) or mode
-            mode_config = self.config.modes.get(mode)
         if mode_config is None:
             raise GatewayError("route.unknown_mode", f"档位不存在: {mode}（合法值: {sorted(self.config.modes)}）", 400)
         healthy: list[RouteTarget] = []
@@ -76,6 +72,13 @@ class ModelRouter:
             ),
         )
         return [self._resolve(target) for target in ordered]
+
+    def resolve_mode(self, mode: str) -> str:
+        # 档位名原样返回；供应商模型名（档位别名）映射到所属档位（ADR 0007 扩展）。
+        # candidates / has_candidates 共用，保证流式预校验与真实选路口径一致。
+        if mode in self.config.modes:
+            return mode
+        return self._mode_of_model(mode) or mode
 
     def _mode_of_model(self, provider_model: str) -> str | None:
         # 档位别名：供应商模型名 → 所属档位（config 中 target.model 精确匹配）
@@ -119,6 +122,7 @@ class ModelRouter:
     def has_candidates(self, mode: str, *, structured: bool = False) -> bool:
         # 预检接口：与 candidates 相同的过滤条件，但不推进轮询计数器、
         # 供请求入口做快速失败校验，避免与真正选路重复消耗轮转位置。
+        mode = self.resolve_mode(mode)  # 别名口径与 candidates 一致（含流式预校验路径）
         mode_config = self.config.modes.get(mode)
         if mode_config is None:
             raise GatewayError("route.unknown_mode", f"档位不存在: {mode}（合法值: {sorted(self.config.modes)}）", 400)

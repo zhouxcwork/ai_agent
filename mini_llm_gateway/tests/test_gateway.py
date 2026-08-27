@@ -51,3 +51,13 @@ def test_stream_retries_target_per_config_before_fallback(client, fake_provider)
 def test_legacy_llm_endpoints_removed(client):
     assert client.post("/v1/llm", json={"model": "fast", "messages": []}).status_code == 404
     assert client.post("/v1/llm/stream", json={"model": "fast", "messages": []}).status_code == 404
+
+
+def test_stream_accepts_model_alias(client, fake_provider):
+    # 档位别名在流式预校验（validate_request/has_candidates）同样生效（ADR 0007 扩展）
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": PRIMARY_MODEL, "messages": [{"role": "user", "content": "hi"}], "stream": True},
+    )
+    assert response.status_code == 200
+    assert "[DONE]" in response.text

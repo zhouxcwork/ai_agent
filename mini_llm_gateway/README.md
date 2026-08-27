@@ -2,6 +2,20 @@
 
 OpenAI 协议兼容的 LLM 网关：档位路由（fast/smart）、上游多协议适配（同一 DeepSeek 供应商同时经 Anthropic Messages 与 OpenAI Responses 两种协议接入，ADR 0013）、熔断健康度、Prompt 模板管理（Jinja2 + SQLite）、调用 trace 审计、Docker 一键部署。任意 OpenAI SDK 改一个 base_url 即可接入。
 
+## 验收速览（课程要求 → 实现与证据）
+
+| 课程要求 | 实现 | 快速验证 |
+|---|---|---|
+| 两种上游 API 协议 | Anthropic Messages（fast 档 / V4-Flash，tool_use 结构化）+ OpenAI Responses（smart 档 / V4-Pro），适配器按 `providers.*.protocol` 绑定（ADR 0013） | `curl /v1/models` 看 gateway_routes 双协议目标；脚本"Chat 非流式"两项 |
+| 统一抽象层 + model 动态路由 | 档位路由 + 协议适配器分发，密钥只在 provider 层（ADR 0007/0013） | curl 示例"Chat 非流式"；脚本"双协议路由" |
+| 流式输出（SSE） | chat chunk 流（`[DONE]` + usage 末块）与 responses 类型化事件流 | curl 示例"流式"两条；脚本"流式"两项 |
+| 结构化输出 | 两层保证：第一层供应商模式（json_schema / json_object / tool_use），第二层本地 Schema 校验 + 修复链（ADR 0008/0009） | curl 示例"结构化输出"；脚本"结构化"项 |
+| 提示词版本管理 | (name, version) 不可变 + Jinja2 沙箱渲染 + gateway_prompt 扩展字段（ADR 0002） | curl 示例"模板"三组；脚本"模板"三项 |
+| 可观测（token 分类 + 延迟/TTFT） | trace 四分类 token（input/output/cached/reasoning）+ latency/ttft + 成本（ADR 0012） | `curl /v1/traces`；脚本"Trace 审计"项 |
+| 韧性（错误码/重试/限流） | 点分错误码（ADR 0010）+ 指数退避重试 3 次（ADR 0014）+ 目标级独立限流 429（ADR 0011） | 脚本"退避重试""按模型限流"两项 + 错误分段表 |
+
+一键全量证据：`uv run python scripts/verify_gateway.py`（19 项 PASS/FAIL，需网关已启动）。
+
 ## 架构分层
 
 ```
@@ -146,7 +160,7 @@ docker compose logs -f gateway                          # 跟踪日志；docker 
 
 ## 档位路由（model 字段语义）与双协议适配
 
-**model 字段只接受档位名**（`fast` / `smart`，config.yaml 可扩展），传具体模型名（如 `gpt-4o`）返回 400 `unknown_mode`；**兼容别名**：传入候选池中的供应商模型名（如 `deepseek-v4-pro`）时自动映射到所属档位（ADR 0007 的扩展，档位仍是主推语义）。响应 `model` 回显档位名；实际命中的路由目标（`供应商/模型`，如 `deepseek-anthropic/deepseek-v4-flash`）**不在响应中透出**（ADR 0015），仅记入 Trace，经 `/v1/traces` 审计可查。
+**model 字段只接受档位名**（`fast` / `smart`，config.yaml 可扩展），传未知模型名（如 `gpt-4o`）返回 400 `unknown_mode`；**兼容别名**：传入候选池中的供应商模型名（如 `deepseek-v4-pro`）时映射到所属档位（路由与流式预校验均生效，ADR 0007 的扩展，档位仍是主推语义）。响应 `model` 回显**请求原始值**（ADR 0004：档位名或别名原样回显）；实际命中的路由目标（`供应商/模型`，如 `deepseek-anthropic/deepseek-v4-flash`）**不在响应中透出**（ADR 0015），仅记入 Trace，经 `/v1/traces` 审计可查。
 
 **协议适配发生在档位内部**（ADR 0013）：路由目标经 `providers.*.protocol` 绑定协议适配器——fast 档 V4-Flash 走 Anthropic Messages 端点（`https://api.deepseek.com/anthropic`）、smart 档 V4-Pro 走 OpenAI Responses 端点，两个连接共用同一 API Key；鉴权头、请求体、返回格式与流事件的差异全部封装在适配器内，对上面两层不可见。
 
@@ -259,7 +273,7 @@ curl -s "http://127.0.0.1:8000/v1/traces?limit=5" -H "Authorization: Bearer $KEY
 
 - `(name, version)` 唯一且**不可变**：页面"修改"= 创建新版本，历史版本永久保留、可回滚
 - 渲染使用 Jinja2 **沙箱环境**（SandboxedEnvironment），页面编辑的模板无法执行任意代码
-- 缺变量直接报错（`missing_prompt_variable`）；开关变量传空串表示关闭
+- 缺变量直接报错（`prompt.missing_variable`）；开关变量传空串表示关闭
 - 启动自动 seed `agent_code_reviewer/v1`
 
 ## 配置说明（config.yaml）
@@ -276,8 +290,8 @@ curl -s "http://127.0.0.1:8000/v1/traces?limit=5" -H "Authorization: Bearer $KEY
 
 ```bash
 uv run --extra dev pytest                                  # 单测/集成测试（含真实 openai SDK 直连，FakeProvider 驱动）
-uv run python scripts/verify_gateway.py                    # 交付验收脚本：17 项功能点 PASS/FAIL（--offline 跳过真实上游）
+uv run python scripts/verify_gateway.py                    # 交付验收脚本：19 项功能点 PASS/FAIL（--offline 跳过真实上游）
 uv run python evals/routing_report.py --db data/gateway.db # 离线路由质量报告（成功率/fallback 率/各目标表现），--json 输出 JSON
 ```
 
-验收脚本需网关已启动（默认 http://127.0.0.1:8000，可用 `--base-url/--api-key/--admin-token` 覆盖），覆盖：健康检查、双协议路由（fast→Anthropic / smart→Responses）、流式 SSE、结构化两层保证、模板管理与版本不可变、Responses 会话续接、Trace 字段齐全（含 cached/reasoning/TTFT）、认证与错误分段码断言、**指数退避重试**（1s 超时触发 → 3 次尝试耗尽 503）、**限流 429**（并发爆发触发租户资源边界）。非标扩展字段：`gateway_prompt`（模板）与 `timeout_seconds`（单请求上游超时，缺省 30s、上限 120s，SDK 经 `extra_body` 传入）。
+验收脚本需网关已启动（默认 http://127.0.0.1:8000，可用 `--base-url/--api-key/--admin-token` 覆盖），共 **19 项**功能点：健康检查、双协议路由（fast→Anthropic / smart→Responses）、流式 SSE、结构化两层保证、模板管理与版本不可变、Responses 会话续接、Trace 字段齐全（含 cached/reasoning/TTFT）、认证与错误分段码断言、**指数退避重试**（短超时触发 → 3 次尝试耗尽 503）、**按模型独立限流**（并发打满 smart 目标 → 429 `resource.target_busy`，同期 fast 目标不受影响）。非标扩展字段：`gateway_prompt`（模板）与 `timeout_seconds`（单请求上游超时，缺省 30s、上限 120s，SDK 经 `extra_body` 传入；**仅 `/v1/chat/completions` 支持**，Responses 端点会忽略该字段）。
