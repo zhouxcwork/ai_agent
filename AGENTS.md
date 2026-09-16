@@ -1,6 +1,6 @@
 # homework（极客邦 AI Agent 课程作业仓库）
 
-课程实战作业集合。当前唯一项目是 `mini_llm_gateway/`（分层版 LLM Gateway，迁移自课程 week01/1-6 单文件 gateway.py，参考 1-7 分层版）。
+课程实战作业集合。项目：`mini_llm_gateway/`（作业一，分层版 LLM Gateway，迁移自课程 week01/1-6 单文件 gateway.py，参考 1-7 分层版）、`governance/`（作业二，工具治理框架 + 转账工具）。课程下发的作业要求原文档存于 `assignments/`。
 
 ## Agent skills
 
@@ -18,11 +18,15 @@ Issues 以 markdown 文件跟踪在仓库 `.scratch/<feature>/` 目录下（本�
 
 ## 目录
 
-- `mini_llm_gateway/`：独立 Python 项目（自带 pyproject.toml 和 .venv，用 uv 管理），真正的工作目录
+- `mini_llm_gateway/`：作业一交付目录。独立 Python 项目（自带 pyproject.toml 和 .venv，用 uv 管理）
+- `governance/`：作业二交付目录。工具治理框架单文件演示（`tool_governance_demo.py`）+ 官方验收 5 测试 + 加固 7 测试，依赖见其 `requirements.txt`；新增代码带 `# [作业二·任务 N]` 标注
+- `assignments/`：课程下发的作业要求原文档（作业一、作业二）。**保持课程原文、不做任何修改**（包括 Word 导出的 `\-` 等转义符）；测试清单、交付链接等补充说明一律写入各交付目录的 README
 - `CONTEXT.md`：领域术语表（平台模型/供应商模型/版本/Trace 等概念的权威定义）
 - `docs/adr/`：架构决策记录（SQLite 选型、模板版本不可变）
 
-## 常用命令（均在 mini_llm_gateway/ 下执行）
+## 常用命令
+
+### mini_llm_gateway/（作业一）
 
 ```bash
 uv sync --extra dev                                   # 安装依赖（含测试依赖）
@@ -31,6 +35,15 @@ uv run --extra dev pytest tests/test_gateway.py -k fallback   # 聚焦单测
 uv run --env-file .env uvicorn mini_llm_gateway.app:create_app --factory --reload  # 本地启动
 docker compose up -d                                  # Docker 一键部署（SQLite 持久化在 ./data）
 uv run python evals/routing_report.py --db data/gateway.db    # 离线路由质量报告（--json 输出 JSON）
+```
+
+### governance/（作业二）
+
+```bash
+python -m pip install -r requirements.txt                          # 安装依赖（pydantic + pytest）
+python -m pytest tests/ -v                                         # 全量测试：官方验收 5 + 加固 7
+python -m pytest tests/test_tool_governance.py -v -k "transfer"    # 作业官方验收命令（5 项）
+python tool_governance_demo.py                                     # 离线演示：审批 CONFIRM、账号脱敏、审计日志
 ```
 
 ## 架构分层与边界（改动前必读）
@@ -68,6 +81,6 @@ config.py   config.yaml → GatewayConfig
 
 - 修改领域术语或语义前先读 `CONTEXT.md`，术语冲突时以它为准并同步更新
 - 配置路径解析顺序：显式参数 > `GATEWAY_CONFIG` 环境变量 > cwd 的 config.yaml
-- 课程参考源码在仓库外：`/Users/zhouxincheng/Documents/work/code/study/python/ai-agent-fullstack-training/course_code/week01/`（1-6 单文件版、1-7 分层参考版）
+- 课程参考源码在仓库外：`/Users/zhouxincheng/Documents/work/code/study/python/ai-agent-fullstack-training/course_code/`（week01/1-6 单文件版、1-7 分层参考版；week02/2-4 是作业二治理框架基准代码）
 - 冒烟测试可用 `/Users/zhouxincheng/Documents/work/code/.env` 中的 DEEPSEEK_API_KEY（含密码，禁止提交或硬编码）
-- 禁止自动提交 git（工作区当前全部为未跟踪文件，提交需用户明确指示）
+- 禁止自动提交 git（提交需用户明确指示）
