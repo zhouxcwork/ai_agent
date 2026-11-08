@@ -34,7 +34,7 @@ python tool_governance_demo.py              # 离线演示：审批 CONFIRM、�
 ```bash
 cd guarded_harness
 uv sync --locked --extra dev     # smolagents==1.26.0（固定版本，未改核心源码）
-uv run python -m pytest -q       # 作业测试集：六个测试文件 94 项（上游 smolagents 自带测试不计入）
+uv run python -m pytest -q       # 作业测试集：六个测试文件 101 项（上游 smolagents 自带测试不计入）
 ```
 
 真模型运行（审批/恢复跨进程操作）与运行记录见 [`guarded_harness/records/`](guarded_harness/records/)。

@@ -51,7 +51,7 @@ python tool_governance_demo.py                                     # 离线演�
 
 ```bash
 uv sync --locked --extra dev        # 安装依赖（smolagents==1.26.0 + pytest）
-uv run python -m pytest -q          # 作业测试集：六个指定测试文件 94 项（上游 smolagents 自带测试不计入）
+uv run python -m pytest -q          # 作业测试集：六个指定测试文件 101 项（上游 smolagents 自带测试不计入）
 uv run python -m guarded_harness run --mode fix --goal-file samples/2_bug_fix/task_fix.json \
   --source samples/2_bug_fix/demo-app --run-dir <运行目录> --test-command 'default=npm|test' \
   --protected tests/login-flow.test.ts --protected tests/session-boundary.test.ts \
