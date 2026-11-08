@@ -48,14 +48,14 @@ class TaskSpec:
     # understand 模式写入范围（None = fix 模式全工作区可写，受 protected 限制）
     write_allow_patterns: list[str] | None = None
     test_commands: dict[str, str] = field(default_factory=dict)  # scope → command_id
-    evidence_patterns: list[str] = field(default_factory=lambda: ["src/**", "tests/**", "*.json", "*.toml", "*.lock"])
+    evidence_patterns: list[str] = field(default_factory=lambda: ["*"])
     evidence_excludes: list[str] = field(default_factory=lambda: [
-        "node_modules/**", ".venv/**", "state/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/*.pyc",
+        "node_modules/**", "**/node_modules/**", ".venv/**", ".git/**", "state/**", "audit/**", "artifacts/**", "__pycache__/**", ".pytest_cache/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/*.pyc",
     ])
-    digest_patterns: list[str] = field(default_factory=lambda: ["src/**", "tests/**", "*.json", "*.toml", "*.lock"])
+    digest_patterns: list[str] = field(default_factory=lambda: ["*"])
     digest_excludes: list[str] = field(default_factory=lambda: [
         "node_modules/**", ".venv/**", "state/**", "audit/**", "artifacts/**",
-        "**/__pycache__/**", "**/.pytest_cache/**", "**/*.pyc",
+        "__pycache__/**", ".pytest_cache/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/*.pyc",
     ])
 
 

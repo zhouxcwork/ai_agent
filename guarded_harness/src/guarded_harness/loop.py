@@ -26,6 +26,8 @@ from smolagents import (
     Timing,
 )
 
+from smolagents.utils import AgentToolCallError
+
 from .approval import ApprovalError, ApprovalStore
 from .audit import AuditLog
 from .completion import make_final_answer_check
@@ -72,7 +74,15 @@ class SerialAgent(ToolCallingAgent):
     def execute_tool_call(self, tool_name, arguments):
         token = current_tool_call_id.set(self._pending_tool_call_id)
         try:
-            return super().execute_tool_call(tool_name, arguments)
+            if tool_name not in {**self.tools, **self.managed_agents}:
+                self.ctx.record("gate.unknown_tool", Decision.REJECT, Actor.HARNESS,
+                                f"Unknown tool: {tool_name}")
+            try:
+                return super().execute_tool_call(tool_name, arguments)
+            except AgentToolCallError as exc:
+                # 框架会在 forward 前验证参数；此入口补齐该拒绝路径的调用级审计。
+                self.ctx.record("gate.param_schema", Decision.REJECT, Actor.HARNESS, str(exc))
+                raise
         finally:
             current_tool_call_id.reset(token)
 
@@ -281,6 +291,9 @@ class HarnessLoop:
             ctx.budget["turns_used"] += 1
             if step.token_usage is not None:
                 ctx.budget["tokens_used"] += step.token_usage.input_tokens + step.token_usage.output_tokens
+            # 响应产生后才知道实际 Token 用量，必须先裁决超限再接受完成。
+            if ctx.budget["tokens_used"] >= ctx.budget["max_tokens"]:
+                return self._finish(StopReason.BUDGET_EXHAUSTED, state=RunState.PAUSED)
             if step.is_final_answer and step.error is None:
                 # 确认边界：final_answer_checks 已通过（M0a E4 时序）
                 return self._finish(StopReason.COMPLETED, state=RunState.COMPLETED)

@@ -531,3 +531,19 @@ def test_reloaded_approved_write_requires_resume(mini):
     assert restored.run().state == RunState.WAITING_APPROVAL
     assert not next_model.generate_calls
     assert (mini.workspace / "src/calc.py").read_text() == before
+
+
+@pytest.mark.parametrize("name,args,rule", [
+    ("read_file", {}, "gate.param_schema"),
+    ("read_file", {"path": 123}, "gate.param_schema"),
+    ("unknown_tool", {}, "gate.unknown_tool"),
+])
+def test_framework_rejections_have_call_audit(mini, name, args, rule):
+    model = ScriptedModel([tool_call_msg(("rejected-call", name, args))])
+    loop, ctx = make_loop(mini, "framework-reject", model, max_turns=1)
+    loop.run()
+    records = [r for r in ctx.audit.records_for_run(ctx.run_id) if r.tool_call_id == "rejected-call"]
+    assert len(records) == 1
+    assert records[0].rule == rule
+    assert records[0].decision == Decision.REJECT
+    assert not ctx.evidence and not ctx.approvals.proposals

@@ -180,3 +180,31 @@ def test_config_change_invalidates_test_evidence(ctx):
     (ctx.task.workspace_root / "pyproject.toml").write_text("# changed config")
     with pytest.raises(ValueError, match="stale"):
         check_completion(ctx)
+
+
+@pytest.mark.parametrize("limit,expected", [(150, RunState.PAUSED), (200, RunState.PAUSED), (201, RunState.COMPLETED)])
+def test_final_response_token_budget_rechecked(mini, limit, expected):
+    model = ScriptedModel([tool_call_msg(("f", "final_answer", {"answer": "done"}))], token_usage=(100, 100))
+    loop, ctx = make_loop(mini, f"final-token-{limit}", model, max_tokens=limit)
+    digest = ctx.sandbox.digest_fileset(ctx.task.evidence_patterns, ctx.task.evidence_excludes)
+    ctx.evidence.append(Evidence(kind="test_run", scope="default", passed=True, exit_code=0, content_digest=digest))
+    result = loop.run()
+    assert result.state == expected
+    assert ctx.budget["tokens_used"] == 200
+    assert len(model.generate_calls) == 1
+    if expected == RunState.PAUSED:
+        assert result.stop_reason == StopReason.BUDGET_EXHAUSTED
+
+
+def test_root_source_change_blocks_restore_and_completion(ctx):
+    from guarded_harness.state import snapshot, workspace_changed
+
+    main = ctx.task.workspace_root / "main.py"
+    main.write_text("answer = 1\n")
+    cp = snapshot(ctx)
+    digest = ctx.sandbox.digest_fileset(ctx.task.evidence_patterns, ctx.task.evidence_excludes)
+    ctx.evidence.append(Evidence(kind="test_run", scope="default", passed=True, exit_code=0, content_digest=digest))
+    main.write_text("answer = 0\n")
+    assert workspace_changed(cp, ctx.sandbox, ctx.task)
+    with pytest.raises(ValueError, match="stale"):
+        check_completion(ctx)

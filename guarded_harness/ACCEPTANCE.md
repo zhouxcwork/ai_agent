@@ -14,7 +14,7 @@ uv sync --locked --extra dev
 uv run pytest -q
 ```
 
-预期 **94 passed**，耗时因机器而异。2026-11-08 在不含原虚拟环境及参考源码的新临时项目实际执行 `uv run python -m pytest -q`，结果为 **94 passed in 3.30s**：[原始输出](records/run-final-verified/pytest_output.txt)。`pytest -q` 与 `python -m pytest -q` 使用同一套项目配置与测试集。
+当前预期 **101 passed**，耗时因机器而异。2026-11-08 在不含原虚拟环境及参考源码的新临时项目实际执行 `uv run python -m pytest -q`，结果为 **101 passed in 3.37s**：[原始输出](records/run-final-verified/pytest_output.txt)。`pytest -q` 与 `python -m pytest -q` 使用同一套项目配置与测试集。
 
 收集范围可另行检查：
 
@@ -22,7 +22,13 @@ uv run pytest -q
 uv run pytest --collect-only -q
 ```
 
-应仅收集本作业六个测试文件的 94 个用例；不包含 smolagents 上游测试。子进程终止测试使用 POSIX 进程组，Windows 不在已验证范围内。
+应仅收集本作业六个测试文件的 101 个用例；不包含 smolagents 上游测试。子进程终止测试使用 POSIX 进程组，Windows 不在已验证范围内。
+
+### 最新边界修复验证
+
+模拟验收补测后，修复了最终模型响应超出 Token 预算仍成功、框架提前拒绝调用漏审计，以及默认指纹遗漏根目录源码三个问题。当前全量 101 项通过。新增反例覆盖预算上限150/200/201与实际用量200、三种真实 Agent 入口拒绝审计，以及根目录 main.py 改动后恢复/完成检查拒绝旧证据。
+
+下列 records 已替换为本轮最新源码在新临时项目中产生的真实运行证据，source_manifest 与运行后交付源码一致；原有旧记录已删除。
 
 ## 五项交付在哪里
 
@@ -59,7 +65,7 @@ uv run pytest --collect-only -q
 | H1 | 无交付物不能完成 | `test_completion.py`：`test_final_answer_rejected_loop_continues`、`test_fix_requires_configured_tests_and_deliverable` |
 | H2 | 修改后旧测试证据失效 | `test_completion.py`：`test_write_after_pass_forces_rerun_end_to_end`、`test_config_change_invalidates_test_evidence` |
 | H3 | 达到轮数或预算明确停止 | `test_harness_loop.py`：`test_max_turns_stops_without_fallback_final_answer`、`test_token_budget_exhausted`、`test_write_budget_exhausted_after_refusal` |
-| T1 | 全部 P0 确定性测试重复通过 | 全量六文件，共 94 用例，包含 14 项 P0 的覆盖及加固场景 |
+| T1 | 全部 P0 确定性测试重复通过 | 全量六文件，共 101 用例，包含 14 项 P0 的覆盖及加固场景 |
 | T2 | 真实模型任务证据相互印证 | [当前源码独立重跑](records/run-final-verified/run_record.md)：修复任务完成，独立复跑 7/7 通过、差异、交付物、审计及恢复记录齐备 |
 
 六文件均位于 `tests/`：`test_gate.py`、`test_sandbox.py`、`test_state_checkpoint.py`、`test_audit.py`、`test_harness_loop.py`、`test_completion.py`。
@@ -70,17 +76,17 @@ uv run pytest --collect-only -q
 
 | 检查项 | 实际结果 |
 |---|---|
-| 安装与作业测试 | 按锁文件安装，94 项通过 |
+| 安装与作业测试 | 按锁文件安装，101 项通过 |
 | 原样例基线 | 7 用例，4 通过、3 失败 |
 | 审批与恢复 | 五段独立进程，两次提案核对、批准、恢复 |
-| 最终状态 | COMPLETED；step=11、seq=11、写入2次 |
+| 最终状态 | COMPLETED；step=10、seq=10、写入2次 |
 | 独立复跑 | 修复工作区 7/7 通过 |
 | 文件变更 | 原有文件仅 `src/auth/session-policy.ts` 改变；原测试、入口与锁文件未变；另生成 `artifacts/result.md` |
-| 证据完整性 | 源码指纹与运行后交付目录一致；存档校验和、测试及工作区指纹核对通过 |
+| 证据完整性 | 源码指纹与当前交付源码一致；存档校验和、测试及工作区指纹核对通过 |
 
 该次批准由主代理核对提案后，在用户授权的验收任务中代为执行，记录 `by=codex-user-authorized-review`，不是用户逐条手工批准，也不是模型自行批准。
 
-[代码理解补充记录](records/run-understand-1/run_record.md)另覆盖源码只读、人工拒绝后的反馈与续跑；它不是最新源码指纹记录的替代物。
+本轮真实模型重验测试修复任务；代码理解及人工拒绝路径由确定性测试覆盖，不保留旧版本真实运行记录。
 
 ## 亲自复现真实任务
 
@@ -113,6 +119,8 @@ uv run python -m guarded_harness resume .scratch/teacher-fix
 
 也可用 `reject` 替代 `approve` 后再恢复。每次命令是独立进程；若再次待审批，重新核对新提案并重复操作。最终 `resume` 退出码 `0` 且状态为 `COMPLETED`，再独立检查：
 
+以下目录由前面的 `--run-dir .scratch/teacher-fix` 复现命令自动生成，仅在完成上述真实任务复现后使用，**无需随作业提交**。如果只核查已提交的运行证据，请直接查看 [records/run-final-verified](records/run-final-verified/run_record.md)，不需要创建该目录。
+
 ```bash
 (cd .scratch/teacher-fix/workspace && npm test)
 cat .scratch/teacher-fix/workspace/artifacts/result.md
@@ -127,3 +135,5 @@ cat .scratch/teacher-fix/workspace/artifacts/result.md
 - 主要修复运行未新增 sample 测试，复用原有七个测试；模型说明中的“测试补充”标题不作为新增测试事实。
 - 路径检查和进程组管理不等于系统级任意代码隔离。临时工作区可能被清理，归档保留原始输出、最终存档、差异与源码指纹。
 - 干净目录依赖安装使用了本机 uv 缓存；无缓存下载、Windows 和其他模型供应商未验证。
+
+本轮首轮启动出现依赖未就绪的环境错误，未作为成功证据；失败原始输出与后续全新运行的成功输出分别归档，详见主要运行记录。

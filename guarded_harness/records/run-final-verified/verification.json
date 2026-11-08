@@ -1,11 +1,11 @@
 {
   "state": "COMPLETED",
-  "step": 11,
-  "seq": 11,
+  "step": 10,
+  "seq": 10,
   "budget": {
-    "turns_used": 11,
+    "turns_used": 10,
     "writes_used": 2,
-    "tokens_used": 35250,
+    "tokens_used": 31784,
     "max_turns": 20,
     "max_writes": 6,
     "max_tokens": 250000
@@ -17,5 +17,5 @@
   "source_manifest_matches_current": true,
   "test_digest_matches": true,
   "workspace_digest_matches": true,
-  "artifact_bytes": 1851
+  "artifact_bytes": 1312
 }

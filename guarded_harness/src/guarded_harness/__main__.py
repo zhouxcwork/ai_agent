@@ -59,10 +59,10 @@ def _build_task_and_sandbox(cfg: dict, workspace: Path) -> tuple[TaskSpec, Sandb
         artifact_target=cfg.get("artifact_target") or "artifacts/result.md",
         write_allow_patterns=["artifacts/**"] if mode == "understand" else None,
         test_commands={scope: scope for scope in commands},
-        evidence_patterns=cfg.get("evidence_patterns") or ["src/**", "tests/**", "*.json", "*.toml", "*.lock"],
-        evidence_excludes=cfg.get("evidence_excludes") or ["node_modules/**", ".venv/**", "state/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/*.pyc"],
-        digest_patterns=cfg.get("digest_patterns") or ["src/**", "tests/**", "*.json", "*.toml", "*.lock"],
-        digest_excludes=cfg.get("digest_excludes") or ["node_modules/**", ".venv/**", "state/**", "audit/**", "artifacts/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/*.pyc"],
+        evidence_patterns=cfg.get("evidence_patterns") or ["*"],
+        evidence_excludes=cfg.get("evidence_excludes") or ["node_modules/**", "**/node_modules/**", ".venv/**", ".git/**", "state/**", "artifacts/**", "__pycache__/**", ".pytest_cache/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/*.pyc"],
+        digest_patterns=cfg.get("digest_patterns") or ["*"],
+        digest_excludes=cfg.get("digest_excludes") or ["node_modules/**", "**/node_modules/**", ".venv/**", ".git/**", "state/**", "artifacts/**", "audit/**", "artifacts/**", "__pycache__/**", ".pytest_cache/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/*.pyc"],
     )
     sandbox = Sandbox(
         workspace_root=workspace,

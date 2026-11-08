@@ -1,10 +1,10 @@
 Using CPython 3.12.13
-Creating virtual environment at: /var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-final-4sycnadh/.venv
-Resolved 41 packages in 9ms
-   Building guarded-harness @ file:///var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-final-4sycnadh
-      Built guarded-harness @ file:///var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-final-4sycnadh
-Prepared 1 package in 1.89s
-Installed 39 packages in 62ms
+Creating virtual environment at: /var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-current-bc4aw123/.venv
+Resolved 41 packages in 0.83ms
+   Building guarded-harness @ file:///var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-current-bc4aw123
+      Built guarded-harness @ file:///var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-current-bc4aw123
+Prepared 1 package in 1.77s
+Installed 39 packages in 43ms
  + annotated-types==0.8.0
  + anyio==4.16.0
  + certifi==2026.10.23
@@ -12,7 +12,7 @@ Installed 39 packages in 62ms
  + click==8.5.1
  + filelock==4.2.9
  + fsspec==2026.9.0
- + guarded-harness==0.1.0 (from file:///var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-final-4sycnadh)
+ + guarded-harness==0.1.0 (from file:///var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-current-bc4aw123)
  + h11==0.16.0
  + hf-xet==1.8.0
  + httpcore2==2.16.0
