@@ -24,12 +24,6 @@ uv run pytest --collect-only -q
 
 应仅收集本作业六个测试文件的 101 个用例；不包含 smolagents 上游测试。子进程终止测试使用 POSIX 进程组，Windows 不在已验证范围内。
 
-### 最新边界修复验证
-
-模拟验收补测后，修复了最终模型响应超出 Token 预算仍成功、框架提前拒绝调用漏审计，以及默认指纹遗漏根目录源码三个问题。当前全量 101 项通过。新增反例覆盖预算上限150/200/201与实际用量200、三种真实 Agent 入口拒绝审计，以及根目录 main.py 改动后恢复/完成检查拒绝旧证据。
-
-下列 records 已替换为本轮最新源码在新临时项目中产生的真实运行证据，source_manifest 与运行后交付源码一致；原有旧记录已删除。
-
 ## 五项交付在哪里
 
 | 老师要求 | 交付入口 |
@@ -66,13 +60,13 @@ uv run pytest --collect-only -q
 | H2 | 修改后旧测试证据失效 | `test_completion.py`：`test_write_after_pass_forces_rerun_end_to_end`、`test_config_change_invalidates_test_evidence` |
 | H3 | 达到轮数或预算明确停止 | `test_harness_loop.py`：`test_max_turns_stops_without_fallback_final_answer`、`test_token_budget_exhausted`、`test_write_budget_exhausted_after_refusal` |
 | T1 | 全部 P0 确定性测试重复通过 | 全量六文件，共 101 用例，包含 14 项 P0 的覆盖及加固场景 |
-| T2 | 真实模型任务证据相互印证 | [当前源码独立重跑](records/run-final-verified/run_record.md)：修复任务完成，独立复跑 7/7 通过、差异、交付物、审计及恢复记录齐备 |
+| T2 | 真实模型任务证据相互印证 | [真实模型运行记录](records/run-final-verified/run_record.md)：修复任务完成，独立复跑 7/7 通过、差异、交付物、审计及恢复记录齐备 |
 
 六文件均位于 `tests/`：`test_gate.py`、`test_sandbox.py`、`test_state_checkpoint.py`、`test_audit.py`、`test_harness_loop.py`、`test_completion.py`。
 
 ## 主要真实运行结果
 
-最新主要记录来自新临时项目的 DeepSeek `deepseek-chat`：
+主要记录来自新临时项目的 DeepSeek `deepseek-chat`：
 
 | 检查项 | 实际结果 |
 |---|---|
@@ -82,11 +76,11 @@ uv run pytest --collect-only -q
 | 最终状态 | COMPLETED；step=10、seq=10、写入2次 |
 | 独立复跑 | 修复工作区 7/7 通过 |
 | 文件变更 | 原有文件仅 `src/auth/session-policy.ts` 改变；原测试、入口与锁文件未变；另生成 `artifacts/result.md` |
-| 证据完整性 | 源码指纹与当前交付源码一致；存档校验和、测试及工作区指纹核对通过 |
+| 证据完整性 | 运行时源码指纹已保存；存档校验和、测试及工作区指纹核对通过 |
 
 该次批准由主代理核对提案后，在用户授权的验收任务中代为执行，记录 `by=codex-user-authorized-review`，不是用户逐条手工批准，也不是模型自行批准。
 
-[当前版本代码理解记录](records/run-understand-verified/run_record.md)补充第二类真实任务：七段独立进程，两次拒绝错误文档路径、一次批准，完成后原有源码零修改。该记录含独立源码指纹、审计、存档及过程输出。
+[代码理解运行记录](records/run-understand-verified/run_record.md)补充第二类真实任务：七段独立进程，两次拒绝错误文档路径、一次批准，完成后原有源码零修改。该记录含独立源码指纹、审计、存档及过程输出。
 
 ## 亲自复现真实任务
 
@@ -130,7 +124,8 @@ cat .scratch/teacher-fix/workspace/artifacts/result.md
 
 ## 验证边界
 
-- 原始输出保留在 records；实际运行环境与源码身份以各记录为准。最新主要记录不等于所有安全场景都由真实模型触发，安全反例主要由确定性测试验证。
+- 自动化测试验证当前实现，包括 C2 结果未知状态的持久化与重复恢复。真实模型记录验证两类任务的运行、审批和恢复流程；安全反例主要由确定性测试验证。
+- 真实模型记录的运行时源码身份见各自 source_manifest.json；两份记录早于 C2 持久标记完善，其指纹不代表当前全部源码。C2 的 UNKNOWN_RESULT 标记由真实子进程崩溃测试验证，不以正常任务运行记录替代。
 - C2 使用真实子进程写入后 `exit(137)`，覆盖结果未保存窗口；不是任意时刻强杀或系统掉电的完整保证。
 - 主要修复运行未新增 sample 测试，复用原有七个测试；模型说明中的“测试补充”标题不作为新增测试事实。
 - 路径检查和进程组管理不等于系统级任意代码隔离。临时工作区可能被清理，归档保留原始输出、最终存档、差异与源码指纹。

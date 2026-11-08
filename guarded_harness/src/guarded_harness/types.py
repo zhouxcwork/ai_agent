@@ -132,7 +132,7 @@ class ConsumedCall:
     tool_name: str
     arguments_fingerprint: str
     proposal_id: str | None = None
-    result_status: str = ""  # ok | failed | unknown
+    result_status: str = ""  # ok | failed | unknown（执行中） | UNKNOWN_RESULT（恢复确认结果不明）
 
 
 @dataclass

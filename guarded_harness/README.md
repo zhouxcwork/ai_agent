@@ -3,7 +3,7 @@
 > **作业三 · 老师验收入口**
 >
 > 请先阅读 [作业验收指南](ACCEPTANCE.md)：包含快速测试、19 项验收对照、真实运行、审计与恢复证据。
-> 当前确定性测试 **101 项通过**。当前真实模型修复任务经两次审批和跨进程恢复后完成，独立复跑被测项目 **7/7 通过**，已覆盖最新三项边界修复。
+> 确定性测试 **101 项通过**。真实模型已跑通测试修复与代码理解任务，包含审批及跨进程恢复；修复工作区独立复跑 **7/7 通过**。
 > [查看完整记录与源码指纹](records/run-final-verified/run_record.md)。
 
 基于固定依赖 `smolagents[openai]==1.26.0`，为 `ToolCallingAgent` 增加 Guarded Harness（受控执行框架），不修改其核心源码。模型选择工具和提出完成申请；程序负责参数门禁、执行边界、审批、检查点、审计、恢复和最终验收。
@@ -100,7 +100,7 @@ uv run python -m guarded_harness run --mode understand \
 ## 文档与运行证据
 
 - [老师验收指南](ACCEPTANCE.md)：提交清单、验收映射和复现步骤。
-- [当前源码独立重跑](records/run-final-verified/run_record.md)：主要验收证据，含原始输出与源码指纹。
+- [真实模型运行记录](records/run-final-verified/run_record.md)：主要验收证据，含原始输出与源码指纹。
 - [课程作业原文](<../assignments/AI Agent 全栈工程师训练营-作业三.md>)。
 
-`records/` 保留当前版本两类独立运行：[测试修复](records/run-final-verified/run_record.md) 与 [代码理解及拒绝反馈](records/run-understand-verified/run_record.md)。
+`records/` 保留两类独立运行：[测试修复](records/run-final-verified/run_record.md) 与 [代码理解及拒绝反馈](records/run-understand-verified/run_record.md)。

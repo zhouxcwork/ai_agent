@@ -457,6 +457,21 @@ def test_real_process_exit_after_write_before_result(mini):
     assert restored.resume().stop_reason == StopReason.NEEDS_REVIEW
     assert not next_model.generate_calls
     assert (mini.workspace / "src/calc.py").read_text() == "# written before crash\n"
+    saved = restored.store.load()
+    assert not saved.pending_approvals
+    unknown = next(c for c in saved.consumed_calls if c.tool_call_id == "crash-write")
+    assert unknown.result_status == "UNKNOWN_RESULT"
+    assert unknown.tool_name == "write_file" and unknown.proposal_id
+    assert "src/calc.py" in unknown.arguments_fingerprint
+    assert saved.plan == loop.plan and saved.memory_payload
+    # 再次创建实例恢复，不能因日志 cursor 已推进而丢失结果未知标记。
+    again_model = ScriptedModel([])
+    again = load_run(mini.root / "crash-window", again_model,
+                     gate=Gate(TOOL_SCHEMAS), sandbox=ctx.sandbox, task=ctx.task)
+    assert again.resume().stop_reason == StopReason.NEEDS_REVIEW
+    assert not again_model.generate_calls
+    assert again.store.load().consumed_calls[0].result_status == "UNKNOWN_RESULT"
+    assert not again.store.load().pending_approvals
 
 
 def test_write_does_not_follow_predictable_temporary_symlink(mini):

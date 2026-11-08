@@ -490,6 +490,28 @@ def load_run(run_dir: Path, model, *, gate: Gate, sandbox: Sandbox, task: TaskSp
     if alignment.block_reason:
         # 悬挂 INTENT / 存档落后于结果 / 日志损坏：保守停止，不自动重放或重建
         apply_to_context(cp, ctx)
+        loop.agent.memory = load_memory(cp.memory_payload or [])
+        loop.plan = cp.plan
+        # 未闭合 INTENT 已证明审批被消费，不能再把调用展示为 PENDING。
+        for call_id in alignment.unknown_result_calls:
+            proposal = next((p for p in ctx.approvals.proposals.values()
+                             if p.tool_call_id == call_id), None)
+            consumed = next((c for c in ctx.consumed_calls if c.tool_call_id == call_id), None)
+            if consumed is None:
+                if proposal is None:
+                    # 缺少提案详情时不编造参数；调用身份仍须持久保留。
+                    consumed = ConsumedCall(call_id, "", "", result_status="UNKNOWN_RESULT")
+                else:
+                    consumed = ConsumedCall(
+                        call_id, proposal.tool_name,
+                        fingerprint(proposal.tool_name, proposal.arguments),
+                        proposal.proposal_id, "UNKNOWN_RESULT",
+                    )
+                ctx.consumed_calls.append(consumed)
+            else:
+                consumed.result_status = "UNKNOWN_RESULT"
+            if proposal is not None:
+                proposal.status = ProposalStatus.CONSUMED
         ctx.state = RunState.PAUSED
         loop._needs_review(alignment.block_reason)
         return loop
