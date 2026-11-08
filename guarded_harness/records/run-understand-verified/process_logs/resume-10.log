@@ -1,0 +1,128 @@
+warning: `VIRTUAL_ENV=/Users/zhouxincheng/Documents/geekbang/homework/guarded_harness/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+╭────────────────────────────────── New run ───────────────────────────────────╮
+│                                                                              │
+│ 帮我找出该项目的登录逻辑，并生成 Markdown 说明文档                           │
+│ You are working inside a guarded harness. Notes:                             │
+│ - All paths are relative to the workspace root; writes require human         │
+│ approval and are executed by the system.                                     │
+│ - Use run_test to verify; a final answer is only accepted if the             │
+│ program-side completion check passes.                                        │
+│ - Never claim success without fresh passing test evidence.                   │
+│                                                                              │
+╰─ OpenAIModel - deepseek-chat ────────────────────────────────────────────────╯
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Step 1 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Final answer: 两次写入 `artifacts/login-flow.md` 
+的提案均被人工拒绝，因此无法在工作区落盘 Markdown 文档（understand 
+模式下写入仅允许 
+`artifacts/**`，且需人工审批）。以下是登录逻辑的完整梳理，可直接作为文档内容使用
+：
+
+# 登录逻辑说明文档
+
+## 1. 整体调用链
+
+```
+POST /api/login  (src/routes/login.ts)
+  └─ authService.login(email, password)      (src/services/auth-service.ts)
+       ├─ userRepository.findByEmail(email)  
+(src/repositories/user-repository.ts)
+       │    └─ queryOne("users", { email })  (src/db/database.ts)
+       ├─ verifyPassword(password, hash)     (src/utils/password.ts)
+       └─ issueAccessToken({userId, role})   (src/utils/token.ts)
+```
+
+后续受保护接口（如 `GET /api/profile`）通过 
+`authMiddleware`（`src/middleware/auth-middleware.ts`）解析 Bearer token。
+
+## 2. 路由层：`src/routes/login.ts`
+
+- 挂在 `/api` 前缀下（见 `src/app.ts`），因此实际路径为 `POST /api/login`。
+- 从 body 中解构 `email` 与 `password`。
+- **入参校验**：任一缺失 → `400 { error: "email and password are required" }`。
+- 调用 `authService.login`，成功 → `200` 并返回 `LoginResult`。
+- 任何异常 → 统一捕获为 `401 { error: error.message }`（注意：会把 "User not 
+found" 原样泄露给客户端，存在用户枚举风险）。
+
+## 3. 业务层：`src/services/auth-service.ts`
+
+`AuthService.login(email, password)`：
+
+1. `userRepository.findByEmail(email)` 查询用户。
+2. 未找到 → 抛出 `Error("User not found")`。
+3. `verifyPassword(password, user.passwordHash)` 校验密码。
+4. 不匹配 → 抛出 `Error("Invalid password")`。
+5. 通过 → `issueAccessToken({ userId: user.id, role: user.role })` 
+签发访问令牌。
+6. 返回 `{ accessToken, user: { id, email, displayName, role } }`（不返回 
+`passwordHash`）。
+
+## 4. 数据访问层
+
+- `src/repositories/user-repository.ts`：`findByEmail` 调用 `queryOne("users", {
+email })`，职责是读 `users` 表。
+- `src/db/database.ts`：内存中的模拟 `users` 
+表，按条件字段全等匹配的一条记录返回。
+  - 种子数据：`demo@example.com`（member，密码 
+demo123）、`admin@example.com`（admin，密码 admin123）。
+  - 哈希格式为 `"hash:" + 明文密码`。
+
+## 5. 密码校验：`src/utils/password.ts`
+
+```ts
+export async function verifyPassword(plain, hash) {
+  return hash === `hash:${plain}`;
+}
+```
+仅做字符串拼接比对，**非真实哈希**（无 
+bcrypt/argon2、无盐、非常量时间比较），仅供演示。
+
+## 6. Token 机制：`src/utils/token.ts`
+
+- `issueAccessToken(payload)`：`JSON.stringify` → base64url，前缀 
+`demo-token.`。
+- `parseAccessToken(token)`：校验前缀 `demo-token.`，base64url 解码后 
+`JSON.parse`，失败返回 `null`。
+- 本质是**未签名**的编码 payload，客户端可任意伪造 
+`userId`/`role`，生产环境必须替换为 JWT + 签名校验。
+
+## 7. 认证中间件：`src/middleware/auth-middleware.ts`
+
+- 读取 `Authorization` 头，必须以 `Bearer ` 开头，否则 `401 { error: "Missing 
+bearer token" }`。
+- 解析 token，失败 → `401 { error: "Invalid token" }`。
+- 成功 → `response.locals.currentUser = payload`，继续 `next()`。
+- 应用位置：`src/routes/profile.ts` 的 `GET /api/profile`，返回当前用户 
+payload。
+
+## 8. 类型定义：`src/types/user.ts`
+
+- `UserRecord`：`id, email, passwordHash, displayName, role ('admin' | 
+'member')`
+- `LoginResult`：`accessToken` + `user`（剔除 `passwordHash`）
+- `AuthTokenPayload`：`userId, role`
+
+## 9. 关键结论与风险点
+
+| 项 | 现状 | 建议 |
+|---|---|---|
+| 应用入口 | `src/app.ts` 中 `app.use("/api", loginRouter)` | — |
+| 认证方式 | 无状态 Bearer token（base64 未签名） | 改用签名 JWT，设过期时间 |
+| 密码存储 | `hash:` + 明文 | bcrypt/argon2 + 随机盐 |
+| 错误信息 | 区分 "User not found" / "Invalid password" | 合并为统一 "Invalid 
+credentials" |
+| 无防爆破 | 无速率限制/锁定 | 增加限流与失败计数 |
+| 无会话/登出 | 仅签发 token，未实现刷新与吊销 | 增加 refresh token 与黑名单 |
+
+## 说明
+
+文档未能写入 
+`artifacts/login-flow.md`（两次写入提案均被人工拒绝）。若需落盘，请批准一次写入
+提案或告知新的目标路径/内容范围。
+Check guarded_completion_check failed with error: deliverable 
+'artifacts/login-logic.md' missing or empty; deliverable 
+'artifacts/login-logic.md' missing or empty; write it (subject to approval) 
+first
+[Step 1: Duration 7.41 seconds| Input tokens: 3,645 | Output tokens: 1,255]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Step 2 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[Step 2: Duration 8.49 seconds| Input tokens: 10,030 | Output tokens: 2,987]
+state=WAITING_APPROVAL stop_reason=None step=12 budget={'turns_used': 12, 'writes_used': 0, 'tokens_used': 55391, 'max_turns': 20, 'max_writes': 4, 'max_tokens': 250000} pending=['prop-06338ca79d83']

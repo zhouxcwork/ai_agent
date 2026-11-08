@@ -1,0 +1,22 @@
+{
+  "pyproject.toml": "f088ab2fca602c45a9253923c0abbfd1852dd9d91df9df2856c234377bc5a958",
+  "src/guarded_harness/__init__.py": "98a410e34fa9a2503073cd98bcbd1882f9b2267044d55d866c5a0bd51876993b",
+  "src/guarded_harness/__main__.py": "59be44bf5f3674f6fae540816e8d224bcce218ce79ae4872068db1a6a1d08e87",
+  "src/guarded_harness/approval.py": "e524de531ee630d57e89b69b80dbbdbf48d80bc01baf65c0b2873b717193c9a9",
+  "src/guarded_harness/audit.py": "76a4331238e1e339575cd5d38400e2093ffbc6143c54c218ed7126eac0e8aa80",
+  "src/guarded_harness/completion.py": "b6b6bd1adf66a0bafcc3ed98a1810cbf07ca645cee3c5618f48323046d5a2293",
+  "src/guarded_harness/gate.py": "7522b6c9fce2d85d13531195bfeee6965e155d7ea6238e5f467ed242094d043d",
+  "src/guarded_harness/loop.py": "194f5861ee9c4741cc0bb60945a16dd253ac8b22f9cb451cdb3dcb24aea8c03d",
+  "src/guarded_harness/sandbox.py": "98c8b1fc0c3d19195dedc096a0777badf42fbac2737ee18342a54a40da4dd1cd",
+  "src/guarded_harness/state.py": "c8f89b7e2f8163b8ac58d2d87c34402c82ee0f440c76081026edfdac843c2f70",
+  "src/guarded_harness/tools.py": "0db351d9439c182d1dddc79dd5a0c4ca578116de27f257f21b26d0387124d6f0",
+  "src/guarded_harness/types.py": "80bc12ccd667cd1b20d79eafb8807ddac573221ba727458e88be6bfe28944fd4",
+  "tests/conftest.py": "c816e907534e36c7622148e57b46f28251326724bd69ae06512d888a2ddb1f94",
+  "tests/test_audit.py": "a6ae0ed229f1fdfa9d4a0736c11c642762b87beaffcd50c94447ca1e43289ef7",
+  "tests/test_completion.py": "58fab8d1fa1b7371da62910ee2c877a1fc39cd34955aec8fcbfecbf1b07bac7e",
+  "tests/test_gate.py": "c211820d2bfae6b658e78c6262f133e3085189bdebec2439136df74b03f01d27",
+  "tests/test_harness_loop.py": "0082745523943a59c6eb954ede22464a3ae2777d0bb25c7fae7b31fcc2449169",
+  "tests/test_sandbox.py": "57312b5ed197b22cc76b57ecdecda7b197bd60e957ba6cd9e148c567c9e36752",
+  "tests/test_state_checkpoint.py": "0ff6d417e1864d4ccfee4e4ce2fb0bf3366421c6c95640b6d94b63f9367208cc",
+  "uv.lock": "c8d1a0f1e0df8c4b0491a6cb04ac1b4da4457fb5812266c99d55e98eec76031c"
+}

@@ -1,0 +1,54 @@
+warning: `VIRTUAL_ENV=/Users/zhouxincheng/Documents/geekbang/homework/guarded_harness/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+Check guarded_completion_check failed with error: deliverable 
+'artifacts/login-logic.md' missing or empty; deliverable 
+'artifacts/login-logic.md' missing or empty; write it (subject to approval) 
+first
+╭────────────────────────────────── New run ───────────────────────────────────╮
+│                                                                              │
+│ 帮我找出该项目的登录逻辑，并生成 Markdown 说明文档                           │
+│ You are working inside a guarded harness. Notes:                             │
+│ - All paths are relative to the workspace root; writes require human         │
+│ approval and are executed by the system.                                     │
+│ - Use run_test to verify; a final answer is only accepted if the             │
+│ program-side completion check passes.                                        │
+│ - Never claim success without fresh passing test evidence.                   │
+│                                                                              │
+╰─ OpenAIModel - deepseek-chat ────────────────────────────────────────────────╯
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Step 1 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[Step 1: Duration 0.82 seconds| Input tokens: 5,035 | Output tokens: 38]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Step 2 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Final answer: 已完成：文档已写入 
+`artifacts/login-logic.md`（写入提案已获人工批准并执行，已回读确认内容存在）。
+
+## 登录逻辑摘要
+
+**调用链**
+`POST /api/login`（`src/routes/login.ts`，在 `src/app.ts` 中以 `/api` 前缀挂载）
+→ `authService.login(email, password)`（`src/services/auth-service.ts`）
+→ `userRepository.findByEmail(email)`（`src/repositories/user-repository.ts`）
+→ `queryOne("users", { email })`（`src/db/database.ts`，内存 `users` 表）
+→ `verifyPassword(password, user.passwordHash)`（`src/utils/password.ts`）
+→ `issueAccessToken({ userId, role })`（`src/utils/token.ts`）
+
+**流程要点**
+1. 路由层校验 `email`/`password`，缺失返回 400；其余异常统一 401。
+2. 业务层：查用户（不存在 → "User not found"）→ 校验密码（不匹配 → "Invalid 
+password"）→ 签发 token → 返回 `{ accessToken, user: { id, email, displayName, 
+role } }`，不含 `passwordHash`。
+3. 密码校验是演示实现：`passwordHash === "hash:" + 明文密码`。
+4. Token 为 `demo-token.` + base64url(JSON) 的无签名载荷，可被伪造。
+5. 受保护接口（`GET /api/profile`）由 `authMiddleware` 校验 `Authorization: 
+Bearer ...`，解析结果放入 `response.locals.currentUser`；缺失/非法分别返回 
+"Missing bearer token"/"Invalid token"。
+6. 演示账号：`demo@example.com / demo123`（member）、`admin@example.com / 
+admin123`（admin）。
+
+**文档还包含**：状态码与响应一览表、类型定义（`UserRecord`/`LoginResult`/`AuthTo
+kenPayload`）、风险与改进建议（改用签名 JWT + 
+过期、bcrypt/argon2、统一错误信息防用户枚举、限流与审计、令牌吊销）、以及本地 
+curl 验证方法。
+
+注：环境未配置可运行的测试 scope（`default` 
+不存在，可用列表为空），因此无法提供测试通过证据，验证以文件回读为准。
+[Step 2: Duration 3.33 seconds| Input tokens: 11,817 | Output tokens: 578]
+state=COMPLETED stop_reason=COMPLETED step=14 budget={'turns_used': 14, 'writes_used': 1, 'tokens_used': 67786, 'max_turns': 20, 'max_writes': 4, 'max_tokens': 250000} pending=[]

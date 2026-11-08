@@ -1,0 +1,16 @@
+{
+ "mode": "understand",
+ "goal": "帮我找出该项目的登录逻辑，并生成 Markdown 说明文档",
+ "artifact_target": "artifacts/login-logic.md",
+ "test_commands": [],
+ "sensitive_paths": [
+  ".env"
+ ],
+ "protected_patterns": [],
+ "max_turns": 20,
+ "max_writes": 4,
+ "max_tokens": 250000,
+ "model_id": "deepseek-chat",
+ "api_key_env": "DEEPSEEK_API_KEY",
+ "base_url_env": "DEEPSEEK_BASE_URL"
+}

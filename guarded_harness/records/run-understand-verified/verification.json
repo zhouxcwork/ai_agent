@@ -1,0 +1,33 @@
+{
+  "state": "COMPLETED",
+  "step": 14,
+  "seq": 14,
+  "budget": {
+    "turns_used": 14,
+    "writes_used": 1,
+    "tokens_used": 67786,
+    "max_turns": 20,
+    "max_writes": 4,
+    "max_tokens": 250000
+  },
+  "changed_baseline_files": [],
+  "rejected_artifact_absent": true,
+  "approval_rejections": 2,
+  "artifact_bytes": 5968,
+  "referenced_source_files": [
+    "src/app.ts",
+    "src/db/database.ts",
+    "src/middleware/auth-middleware.ts",
+    "src/repositories/user-repository.ts",
+    "src/routes/login.ts",
+    "src/routes/profile.ts",
+    "src/server.ts",
+    "src/services/auth-service.ts",
+    "src/types/user.ts",
+    "src/utils/password.ts",
+    "src/utils/token.ts"
+  ],
+  "checksum_ok": true,
+  "source_manifest_matches_current": true,
+  "workspace_digest_matches": true
+}

@@ -103,4 +103,4 @@ uv run python -m guarded_harness run --mode understand \
 - [当前源码独立重跑](records/run-final-verified/run_record.md)：主要验收证据，含原始输出与源码指纹。
 - [课程作业原文](<../assignments/AI Agent 全栈工程师训练营-作业三.md>)。
 
-`records/` 只保留本轮独立重跑记录；真实模型验证测试修复任务，代码理解及拒绝反馈由确定性测试覆盖。
+`records/` 保留当前版本两类独立运行：[测试修复](records/run-final-verified/run_record.md) 与 [代码理解及拒绝反馈](records/run-understand-verified/run_record.md)。
