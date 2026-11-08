@@ -1,0 +1,23 @@
+--- /var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-final-4sycnadh/samples/2_bug_fix/demo-app/src/auth/session-policy.ts	2026-10-13 23:33:52
++++ /var/folders/bp/j7pg2nsj6p57l15ybdmlf7_c0000gn/T/gh-final-4sycnadh/runs/fix-final/workspace/src/auth/session-policy.ts	2026-11-08 21:42:16
+@@ -2,8 +2,17 @@
+   expiresAt: string;
+ }
+ 
++/**
++ * 判断会话在给定时刻是否已过期。
++ * 过期时刻本身即视为已过期（expiresAt <= now）。
++ */
+ export function isSessionExpired(session: ExpiringSession, now: Date): boolean {
+-  const expiresOn = session.expiresAt.slice(0, 10);
+-  const currentDay = now.toISOString().slice(0, 10);
+-  return expiresOn < currentDay;
++  const expiresAtMs = Date.parse(session.expiresAt);
++
++  if (Number.isNaN(expiresAtMs)) {
++    // 无法解析的过期时间按已过期处理，避免会话被无限期使用。
++    return true;
++  }
++
++  return now.getTime() >= expiresAtMs;
+ }

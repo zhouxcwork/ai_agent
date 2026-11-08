@@ -1,0 +1,21 @@
+{
+  "state": "COMPLETED",
+  "step": 11,
+  "seq": 11,
+  "budget": {
+    "turns_used": 11,
+    "writes_used": 2,
+    "tokens_used": 35250,
+    "max_turns": 20,
+    "max_writes": 6,
+    "max_tokens": 250000
+  },
+  "changed_source_files": [
+    "src/auth/session-policy.ts"
+  ],
+  "checksum_ok": true,
+  "source_manifest_matches_current": true,
+  "test_digest_matches": true,
+  "workspace_digest_matches": true,
+  "artifact_bytes": 1851
+}

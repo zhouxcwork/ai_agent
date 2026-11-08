@@ -1,0 +1,31 @@
+{
+ "mode": "fix",
+ "goal": "给登录会话模块补充测试并修复失败用例",
+ "artifact_target": "artifacts/result.md",
+ "test_commands": [
+  {
+   "scope": "default",
+   "argv": [
+    "npm",
+    "test"
+   ],
+   "timeout_s": 180.0
+  }
+ ],
+ "sensitive_paths": [
+  ".env"
+ ],
+ "protected_patterns": [
+  "tests/login-flow.test.ts",
+  "tests/session-boundary.test.ts",
+  "tests/session-policy.test.ts",
+  "package.json",
+  "package-lock.json"
+ ],
+ "max_turns": 20,
+ "max_writes": 6,
+ "max_tokens": 250000,
+ "model_id": "deepseek-chat",
+ "api_key_env": "DEEPSEEK_API_KEY",
+ "base_url_env": "DEEPSEEK_BASE_URL"
+}

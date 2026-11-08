@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "guarded-harness"
+version = "0.1.0"
+description = "作业三：基于 smolagents 的可恢复 Guarded Coding Harness（门禁、沙箱、检查点、审计、恢复、验收）"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  # 固定版本依赖，不修改 smolagents 核心源码（openai extra 供 OpenAIServerModel 接 DeepSeek）
+  "smolagents[openai]==1.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/guarded_harness"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

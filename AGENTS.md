@@ -1,6 +1,6 @@
 # homework（极客邦 AI Agent 课程作业仓库）
 
-课程实战作业集合。项目：`mini_llm_gateway/`（作业一，分层版 LLM Gateway，迁移自课程 week01/1-6 单文件 gateway.py，参考 1-7 分层版）、`governance/`（作业二，工具治理框架 + 转账工具）。课程下发的作业要求原文档存于 `assignments/`。
+课程实战作业集合。项目：`mini_llm_gateway/`（作业一，分层版 LLM Gateway，迁移自课程 week01/1-6 单文件 gateway.py，参考 1-7 分层版）、`governance/`（作业二，工具治理框架 + 转账工具）、`guarded_harness/`（作业三，基于 smolagents 的可恢复 Guarded Coding Harness）。课程下发的作业要求原文档存于 `assignments/`。
 
 ## Agent skills
 
@@ -20,7 +20,8 @@ Issues 以 markdown 文件跟踪在仓库 `.scratch/<feature>/` 目录下（本�
 
 - `mini_llm_gateway/`：作业一交付目录。独立 Python 项目（自带 pyproject.toml 和 .venv，用 uv 管理）
 - `governance/`：作业二交付目录。工具治理框架单文件演示（`tool_governance_demo.py`）+ 官方验收 5 测试 + 加固 7 测试，依赖见其 `requirements.txt`；新增代码带 `# [作业二·任务 N]` 标注
-- `assignments/`：课程下发的作业要求原文档（作业一、作业二）。**保持课程原文、不做任何修改**（包括 Word 导出的 `\-` 等转义符）；测试清单、交付链接等补充说明一律写入各交付目录的 README
+- `guarded_harness/`：作业三交付目录。独立 Python 项目（uv 管理，依赖 `smolagents[openai]==1.26.0`，**不改其核心源码**）；老师验收入口在 `ACCEPTANCE.md`，真模型运行/审计/恢复记录在 `records/`；本地参考源码 `guarded_harness/smolagents/` 与 `.scratch/` 已 gitignore，不交付
+- `assignments/`：课程下发的作业要求原文档（作业一、二、三）。**保持课程原文、不做任何修改**（包括 Word 导出的 `\-` 等转义符）；测试清单、交付链接等补充说明一律写入各交付目录的 README
 - `CONTEXT.md`：领域术语表（平台模型/供应商模型/版本/Trace 等概念的权威定义）
 - `docs/adr/`：架构决策记录（SQLite 选型、模板版本不可变）
 
@@ -44,6 +45,19 @@ python -m pip install -r requirements.txt                          # 安装依�
 python -m pytest tests/ -v                                         # 全量测试：官方验收 5 + 加固 7
 python -m pytest tests/test_tool_governance.py -v -k "transfer"    # 作业官方验收命令（5 项）
 python tool_governance_demo.py                                     # 离线演示：审批 CONFIRM、账号脱敏、审计日志
+```
+
+### guarded_harness/（作业三）
+
+```bash
+uv sync --locked --extra dev        # 安装依赖（smolagents==1.26.0 + pytest）
+uv run python -m pytest -q          # 作业测试集：六个指定测试文件 94 项（上游 smolagents 自带测试不计入）
+uv run python -m guarded_harness run --mode fix --goal-file samples/2_bug_fix/task_fix.json \
+  --source samples/2_bug_fix/demo-app --run-dir <运行目录> --test-command 'default=npm|test' \
+  --protected tests/login-flow.test.ts --protected tests/session-boundary.test.ts \
+  --protected tests/session-policy.test.ts --protected package.json --protected package-lock.json   # 真模型任务
+uv run python -m guarded_harness approve <运行目录> <proposal_id>   # 审批（独立进程）
+uv run python -m guarded_harness resume <运行目录>                  # 恢复（跨进程，执行已批准提案并续跑）
 ```
 
 ## 架构分层与边界（改动前必读）
@@ -82,5 +96,6 @@ config.py   config.yaml → GatewayConfig
 - 修改领域术语或语义前先读 `CONTEXT.md`，术语冲突时以它为准并同步更新
 - 配置路径解析顺序：显式参数 > `GATEWAY_CONFIG` 环境变量 > cwd 的 config.yaml
 - 课程参考源码在仓库外：`/Users/zhouxincheng/Documents/work/code/study/python/ai-agent-fullstack-training/course_code/`（week01/1-6 单文件版、1-7 分层参考版；week02/2-4 是作业二治理框架基准代码）
-- 冒烟测试可用 `/Users/zhouxincheng/Documents/work/code/.env` 中的 DEEPSEEK_API_KEY（含密码，禁止提交或硬编码）
+- 冒烟测试可用 `/Users/zhouxincheng/Documents/work/code/.env` 中的 DEEPSEEK_API_KEY（含密码，禁止提交或硬编码）；作业三真模型运行同样从环境变量注入（DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL），运行记录只含变量名
+- 作业三约束：不修改 smolagents 核心源码（只用公开接口子类化扩展）；`guarded_harness/samples/` 是只读被测仓库，运行时复制到独立工作区；不读老师 `project3/v2` 实现
 - 禁止自动提交 git（提交需用户明确指示）

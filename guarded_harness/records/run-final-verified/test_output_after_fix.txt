@@ -1,0 +1,19 @@
+
+> bug-fix-demo@1.0.0 test
+> node --import tsx --test "tests/**/*.test.ts"
+
+✔ 登录成功后返回会话令牌 (0.422458ms)
+✔ 密码错误时登录失败 (0.214084ms)
+✔ 到期前仍然有效 (0.991083ms)
+✔ 到期时刻视为已过期 (0.056416ms)
+✔ 到期后立即失效 (0.044542ms)
+✔ 会话在过期时刻之后立即失效 (1.022041ms)
+✔ 会话在过期时刻之前仍然有效 (0.055334ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 138.114416

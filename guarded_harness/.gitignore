@@ -1,0 +1,7 @@
+# 本地参考源码（smolagents v1.26.0 精简副本），不纳入作业交付
+/smolagents/
+/.scratch/
+/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

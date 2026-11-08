@@ -8,8 +8,9 @@
 |---|---|---|---|---|
 | 1 | **Mini LLM Gateway**：OpenAI 协议兼容的 LLM 网关——同一 DeepSeek 供应商经 Anthropic Messages / OpenAI Responses 双协议接入（适配器模式），档位路由、SSE 流式、结构化输出、Prompt 版本管理、Token/延迟可观测、指数退避与按模型限流 | week01 | ✅ | [`mini_llm_gateway/`](mini_llm_gateway/README.md) |
 | 2 | **工具治理框架 · 转账工具**：在课程治理框架上新增 transfer 工具，跑通参数校验 → 业务预检 → 权限判断 → 人工审批 → 超时处理 → 结果脱敏 → 审计追踪全链路；附幂等去重、并发一致性、租户隔离、错误码语义等加固 | week02 | ✅ | [`governance/`](governance/README.md) |
+| 3 | **Guarded Harness**：基于 smolagents 1.26.0（不改核心源码）为 ToolCallingAgent 外挂可恢复护栏——门禁（参数/重复）、沙箱（路径逃逸/命令白名单/进程组）、审批挂起与工程侧代执行、检查点跨进程恢复、审计链、程序侧完成验收；真模型跑通测试修复与代码理解两类任务 | week03 | ✅ | [`guarded_harness/`](guarded_harness/README.md) |
 
-作业要求原文档（课程下发，存于 [`assignments/`](assignments/)）：[作业一](<assignments/AI Agent 全栈工程师训练营-作业一.md>) · [作业二](<assignments/AI Agent 全栈工程师训练营-作业二.md>)
+作业要求原文档（课程下发，存于 [`assignments/`](assignments/)）：[作业一](<assignments/AI Agent 全栈工程师训练营-作业一.md>) · [作业二](<assignments/AI Agent 全栈工程师训练营-作业二.md>) · [作业三](<assignments/AI Agent 全栈工程师训练营-作业三.md>)
 
 作业一的一键验收（需先启动网关）：
 
@@ -27,6 +28,16 @@ python -m pip install -r requirements.txt   # pydantic + pytest
 python -m pytest tests/ -v                  # 官方验收 5 项 + 加固 7 项（共 12 项）
 python tool_governance_demo.py              # 离线演示：审批 CONFIRM、账号脱敏、审计日志
 ```
+
+作业三的一键验收：
+
+```bash
+cd guarded_harness
+uv sync --locked --extra dev     # smolagents==1.26.0（固定版本，未改核心源码）
+uv run python -m pytest -q       # 作业测试集：六个测试文件 94 项（上游 smolagents 自带测试不计入）
+```
+
+真模型运行（审批/恢复跨进程操作）与运行记录见 [`guarded_harness/records/`](guarded_harness/records/)。
 
 ## 仓库约定
 
