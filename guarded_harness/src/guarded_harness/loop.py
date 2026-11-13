@@ -137,6 +137,8 @@ class HarnessLoop:
         )
         self.agent.final_answer_checks = [make_final_answer_check(ctx)]
         self.task_text = ctx.task.input_text + TASK_HINTS + extra_instructions
+        if ctx.task.mode == "understand":
+            self.task_text += f"\n代码理解任务只允许写入产物 {ctx.task.artifact_target}，仍须审批。"
         self._gen = None
         self._started = False  # 是否已启动过（决定 reset 与重复 TaskStep 处理）
         self.plan = ("读取相关源码 → 提出并审批修改 → 执行配置测试 → 生成交付说明 → 程序验收"

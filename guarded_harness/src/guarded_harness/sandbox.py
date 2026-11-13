@@ -10,6 +10,7 @@ import fnmatch
 import hashlib
 import os
 import signal
+import stat
 import subprocess
 import time
 from dataclasses import dataclass
@@ -61,11 +62,11 @@ class Sandbox:
         self.workspace_root = Path(workspace_root).resolve()
         self.commands = commands
         # 敏感路径：绝对路径原样；相对路径锚定 workspace_root（真实落点比对）
-        self.sensitive_paths: list[Path] = []
+        self._configured_sensitive_paths: list[Path] = []
         for raw in sensitive_paths or []:
             p = Path(raw).expanduser()
-            self.sensitive_paths.append(p if p.is_absolute() else self.workspace_root / p)
-        self.sensitive_paths = [Path(os.path.realpath(p)) for p in self.sensitive_paths]
+            self._configured_sensitive_paths.append(Path(os.path.abspath(self.workspace_root / p)))
+        self.sensitive_paths = [Path(os.path.realpath(p)) for p in self._configured_sensitive_paths]
         # 受保护文件（写拒绝）：相对 workspace 的 glob 模式，如 "tests/*.test.ts"、"package.json"
         self.protected_patterns = protected_patterns or []
 
@@ -75,6 +76,11 @@ class Sandbox:
         """规范化路径：绝对路径原样，相对路径锚定 workspace_root。"""
         p = Path(rel_path)
         return p if p.is_absolute() else self.workspace_root / p
+
+    def _protected_pattern(self, path: Path) -> str | None:
+        rel = path.relative_to(self.workspace_root).as_posix()
+        return next((pat for pat in self.protected_patterns
+                     if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(path.name, pat)), None)
 
     def check_path(self, rel_path: str, *, for_write: bool) -> tuple[Path | None, SandboxRejection | None]:
         """返回 (真实落点, 拒绝)。规范化容器检查 → realpath 落点检查 → 敏感路径 → 受保护文件。"""
@@ -100,18 +106,17 @@ class Sandbox:
                     message=f"Rejected: path '{rel_path}' targets a sensitive location.",
                     detail={"realpath": str(real)},
                 )
-        if for_write:
+        pattern = self._protected_pattern(real) if for_write else None
+        if pattern is not None:
             posix_rel = real.relative_to(root).as_posix()
-            for pattern in self.protected_patterns:
-                if fnmatch.fnmatch(posix_rel, pattern) or fnmatch.fnmatch(real.name, pattern):
-                    return None, SandboxRejection(
-                        rule="sandbox.protected_path",
-                        message=(
-                            f"Rejected: '{posix_rel}' is a protected file (original tests / test entry / lockfile). "
-                            "Add new files instead of modifying protected ones."
-                        ),
-                        detail={"pattern": pattern},
-                    )
+            return None, SandboxRejection(
+                rule="sandbox.protected_path",
+                message=(
+                    f"Rejected: '{posix_rel}' is a protected file (original tests / test entry / lockfile). "
+                    "Add new files instead of modifying protected ones."
+                ),
+                detail={"pattern": pattern},
+            )
         return real, None
 
     # ------------------------------------------------------------ 命令白名单与进程组（S3/S4）
@@ -178,6 +183,31 @@ class Sandbox:
             pass
 
     # ------------------------------------------------------------ 指纹（C4 / H2 载体）
+
+    def guarded_path_snapshot(self) -> dict[str, str]:
+        """独立于测试证据范围；对敏感目录记录其树，对保护规则沿用写门禁匹配。"""
+        paths = set()
+        for path in self._configured_sensitive_paths + self.sensitive_paths:
+            paths.add(path)
+            if not path.is_symlink() and path.is_dir():
+                paths.update(path.rglob("*"))
+        if self.protected_patterns:
+            paths.update(p for p in self.workspace_root.rglob("*") if self._protected_pattern(p) is not None)
+        snapshot = {}
+        for path in paths:
+            try:
+                mode = path.lstat().st_mode
+                if stat.S_ISLNK(mode):
+                    value = f"link:{os.readlink(path)}"
+                elif stat.S_ISREG(mode):
+                    value = hashlib.sha256(path.read_bytes()).hexdigest()
+                else:
+                    value = str(stat.S_IFMT(mode))
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            key = path.relative_to(self.workspace_root).as_posix() if _under(path, self.workspace_root) else str(path)
+            snapshot[key] = value
+        return snapshot
 
     def digest_fileset(self, patterns: list[str], exclude_patterns: list[str] | None = None) -> str:
         """约定文件集合的联合指纹：相对路径 + 内容 sha256，排序后整体散列。

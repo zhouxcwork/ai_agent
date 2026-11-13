@@ -14,7 +14,7 @@ uv sync --locked --extra dev
 uv run pytest -q
 ```
 
-当前预期 **101 passed**，耗时因机器而异。2026-11-08 在不含原虚拟环境及参考源码的新临时项目实际执行 `uv run python -m pytest -q`，结果为 **101 passed in 3.37s**：[原始输出](records/run-final-verified/pytest_output.txt)。`pytest -q` 与 `python -m pytest -q` 使用同一套项目配置与测试集。
+当前在作业目录执行 `uv run --locked --extra dev pytest -q`，实际结果为 **103 passed in 3.40s**，耗时因机器而异。下方真实模型记录另附当次运行的[测试原始输出](records/run-final-verified/pytest_output.txt)。
 
 收集范围可另行检查：
 
@@ -22,7 +22,7 @@ uv run pytest -q
 uv run pytest --collect-only -q
 ```
 
-应仅收集本作业六个测试文件的 101 个用例；不包含 smolagents 上游测试。子进程终止测试使用 POSIX 进程组，Windows 不在已验证范围内。
+应仅收集本作业六个测试文件的 103 个用例；不包含 smolagents 上游测试。子进程终止测试使用 POSIX 进程组，Windows 不在已验证范围内。
 
 ## 五项交付在哪里
 
@@ -59,7 +59,7 @@ uv run pytest --collect-only -q
 | H1 | 无交付物不能完成 | `test_completion.py`：`test_final_answer_rejected_loop_continues`、`test_fix_requires_configured_tests_and_deliverable` |
 | H2 | 修改后旧测试证据失效 | `test_completion.py`：`test_write_after_pass_forces_rerun_end_to_end`、`test_config_change_invalidates_test_evidence` |
 | H3 | 达到轮数或预算明确停止 | `test_harness_loop.py`：`test_max_turns_stops_without_fallback_final_answer`、`test_token_budget_exhausted`、`test_write_budget_exhausted_after_refusal` |
-| T1 | 全部 P0 确定性测试重复通过 | 全量六文件，共 101 用例，包含 14 项 P0 的覆盖及加固场景 |
+| T1 | 全部 P0 确定性测试重复通过 | 全量六文件，共 103 用例，包含 14 项 P0 的覆盖及加固场景 |
 | T2 | 真实模型任务证据相互印证 | [真实模型运行记录](records/run-final-verified/run_record.md)：修复任务完成，独立复跑 7/7 通过、差异、交付物、审计及恢复记录齐备 |
 
 六文件均位于 `tests/`：`test_gate.py`、`test_sandbox.py`、`test_state_checkpoint.py`、`test_audit.py`、`test_harness_loop.py`、`test_completion.py`。
@@ -124,7 +124,7 @@ cat .scratch/teacher-fix/workspace/artifacts/result.md
 
 ## 验证范围
 
-- 自动化测试验证门禁、执行边界、审计、预算、完成判定及崩溃恢复等场景。
+- 自动化测试验证门禁、执行边界、审计、预算、完成判定及崩溃恢复等场景。代码理解模式在提案和审批代执行前均校验指定产物路径；测试命令在敏感或受保护路径留下变化时，即使退出码为 0 也判为失败。前后指纹无法证明文件未被读取，或未被修改后还原。
 - 真实模型记录验证代码理解和测试修复两类任务的执行、审批与恢复流程。
 - C2 结果未知状态的持久化和禁止重放，通过真实子进程写入后退出的崩溃测试验证。
 - 真实运行的环境、源码身份和原始输出见各记录；源码身份以对应的 source_manifest.json 为准。

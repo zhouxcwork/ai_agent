@@ -8,6 +8,8 @@ observation（模型自纠），不抛异常。写操作不直接执行 handler�
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import threading
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -120,8 +122,6 @@ def validate_write_target(ctx: RunContext, path: str):
 
     返回 (真实落点, SandboxRejection | None)：容器/真实落点/敏感/受保护/写入范围。
     """
-    from .sandbox import SandboxRejection
-
     real, srej = ctx.sandbox.check_path(path, for_write=True)
     if srej is not None:
         return None, srej
@@ -132,6 +132,14 @@ def validate_write_target(ctx: RunContext, path: str):
             return None, SandboxRejection(
                 rule="sandbox.write_out_of_scope",
                 message=f"Rejected: in understand mode writes are limited to {allow}; source code is read-only.",
+            )
+    if ctx.task.mode == "understand":
+        target = Path(os.path.normpath(ctx.sandbox.resolve(ctx.task.artifact_target)))
+        requested = Path(os.path.normpath(ctx.sandbox.resolve(path)))
+        if not ctx.task.artifact_target or requested != target or real != target:
+            return None, SandboxRejection(
+                rule="sandbox.write_out_of_scope",
+                message=f"Rejected: in understand mode only '{ctx.task.artifact_target}' may be written.",
             )
     return real, None
 
@@ -237,13 +245,23 @@ class ControlledRunTest(Tool):
                                           f"Rejected: test scope '{scope}' is not configured. Available: {sorted(ctx.task.test_commands)}.")
         ctx.record(f"tool.{self.name}", Decision.ALLOW, Actor.HARNESS, f"scope={scope} command={command_id}")
         digest_before = ctx.sandbox.digest_fileset(ctx.task.evidence_patterns, ctx.task.evidence_excludes)
+        guarded_before = ctx.sandbox.guarded_path_snapshot()
         result = ctx.sandbox.run_command(command_id, cancel_event=ctx.cancel_event)
         if isinstance(result, SandboxRejection):
             return _rejection_observation(ctx, result.rule, result.message)
         assert isinstance(result, CommandResult)
         digest_after = ctx.sandbox.digest_fileset(ctx.task.evidence_patterns, ctx.task.evidence_excludes)
         content_unchanged = digest_after == digest_before
-        passed = result.exit_code == 0 and not result.timed_out and not result.cancelled and content_unchanged
+        guarded_after = ctx.sandbox.guarded_path_snapshot()
+        changes = {
+            "added": sorted(guarded_after.keys() - guarded_before.keys()),
+            "modified": sorted(p for p in guarded_before.keys() & guarded_after.keys()
+                               if guarded_before[p] != guarded_after[p]),
+            "deleted": sorted(guarded_before.keys() - guarded_after.keys()),
+        }
+        guarded_changed = any(changes.values())
+        passed = (result.exit_code == 0 and not result.timed_out and not result.cancelled
+                  and content_unchanged and not guarded_changed)
         summary = _tail(result.stdout + ("\n" + result.stderr if result.stderr else ""))
         if result.timed_out:
             summary = f"TIMEOUT after {result.duration_s:.1f}s\n" + summary
@@ -251,6 +269,9 @@ class ControlledRunTest(Tool):
             summary = "CANCELLED by user\n" + summary
         if not content_unchanged:
             summary = "WARNING: workspace content changed during test run; result not recorded as pass\n" + summary
+        if guarded_changed:
+            ctx.record("sandbox.test_guarded_paths_changed", Decision.REJECT, Actor.HARNESS, json.dumps(changes))
+            summary = "WARNING: sensitive or protected paths changed; result not recorded as pass\n" + summary
         ctx.evidence.append(
             Evidence(
                 kind="test_run",

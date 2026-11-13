@@ -196,6 +196,32 @@ class TestFilesetDigest:
 
 
 class TestRunTestIntegrity:
+    def test_guarded_paths_outside_evidence_are_audited(self, ctx):
+        import json
+
+        from conftest import call_id
+
+        from guarded_harness.tools import ControlledRunTest
+
+        root = ctx.sandbox.workspace_root
+        (root / ".env").write_text("original secret")
+        (root / "old.lock").write_text("old")
+        ctx.sandbox = Sandbox(root, {"mutate": CommandSpec(
+            "mutate", [sys.executable, "-c", "from pathlib import Path; "
+                       "Path('.env').write_text('changed secret'); "
+                       "Path('old.lock').unlink(); Path('new.lock').touch()"], 30,
+        )}, sensitive_paths=[".env"], protected_patterns=["*.lock"])
+        ctx.task.test_commands = {"default": "mutate"}
+        ctx.task.evidence_patterns = ["src/**"]
+
+        with call_id("guarded-test"):
+            observation = ControlledRunTest(ctx)(scope="default", sanitize_inputs_outputs=True)
+        assert "FAIL (exit_code=0)" in observation
+        assert not ctx.evidence[-1].passed
+        record, = [r for _, r in ctx.audit.read_all() if r.rule == "sandbox.test_guarded_paths_changed"]
+        assert record.tool_call_id == "guarded-test"
+        assert json.loads(record.detail) == {"added": ["new.lock"], "modified": [".env"], "deleted": ["old.lock"]}
+
     def test_content_change_during_test_not_recorded_as_pass(self, mini):
         """测试前后核对受测内容：执行中被改动的内容不登记有效通过。"""
         from conftest import call_id

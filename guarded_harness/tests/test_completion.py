@@ -137,17 +137,40 @@ class TestUnderstandMode:
     def test_full_understand_flow(self, mini):
         model = ScriptedModel([
             tool_call_msg(("u1", "read_file", {"path": "src/calc.py"})),
+            tool_call_msg(("u-wrong", "write_file", {"path": "artifacts/wrong.md", "content": "wrong"})),
             tool_call_msg(("u2", "write_file", {"path": "artifacts/login.md", "content": "# 登录逻辑说明\nsub 存在 bug。\n"})),
             tool_call_msg(("u3", "final_answer", {"answer": "文档已生成"})),
         ])
         loop, ctx = make_loop(mini, "run-und", model, mode="understand")
         assert loop.run().state == RunState.WAITING_APPROVAL
+        assert len(ctx.approvals.proposals) == 1
+        assert any(r.tool_call_id == "u-wrong" and r.rule == "sandbox.write_out_of_scope"
+                   for _, r in ctx.audit.read_all())
         proposal_id = next(iter(ctx.approvals.proposals))
+        assert not (mini.workspace / "artifacts" / "login.md").exists()
         loop.approve(proposal_id)
         outcome = loop.resume()
         assert outcome.state == RunState.COMPLETED
         artifact = mini.workspace / "artifacts" / "login.md"
         assert artifact.exists() and artifact.stat().st_size > 0
+        assert not (mini.workspace / "artifacts" / "wrong.md").exists()
+
+    def test_approved_artifact_cannot_be_redirected(self, mini):
+        model = ScriptedModel([
+            tool_call_msg(("u-link", "write_file", {"path": "artifacts/login.md", "content": "approved"})),
+        ])
+        loop, ctx = make_loop(mini, "run-und-link", model, mode="understand")
+        assert loop.run().state == RunState.WAITING_APPROVAL
+        loop.approve(next(iter(ctx.approvals.proposals)))
+        target = mini.workspace / "artifacts" / "login.md"
+        target.parent.mkdir(exist_ok=True)
+        target.symlink_to("wrong.md")
+        outcome = loop.resume()
+        assert outcome.state == RunState.PAUSED
+        assert outcome.stop_reason == StopReason.NEEDS_REVIEW
+        assert not (target.parent / "wrong.md").exists()
+        assert any(r.tool_call_id == "u-link" and r.rule == "approval.revalidation_failed"
+                   for _, r in ctx.audit.read_all())
 
     def test_source_write_rejected_in_understand_mode(self, ctx):
         """代码理解：源码不可写，仅 artifacts 可经审批生成。"""
