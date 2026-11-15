@@ -206,7 +206,7 @@ class Sandbox:
             except (FileNotFoundError, NotADirectoryError):
                 continue
             key = path.relative_to(self.workspace_root).as_posix() if _under(path, self.workspace_root) else str(path)
-            snapshot[key] = value
+            snapshot[key] = f"{stat.S_IMODE(mode):04o}:{value}"
         return snapshot
 
     def digest_fileset(self, patterns: list[str], exclude_patterns: list[str] | None = None) -> str:

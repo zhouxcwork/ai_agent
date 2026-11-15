@@ -1,14 +1,23 @@
 """S1-S4 沙箱测试：路径逃逸、软链接/敏感路径、命令白名单、进程组终止。"""
 
+import errno
+import json
 import os
 import sys
 import threading
 import time
+from pathlib import Path
+
+import pytest
+
+from conftest import call_id
 
 from guarded_harness.approval import ApprovalStore
 from guarded_harness.audit import AuditLog
+from guarded_harness.completion import latest_test_evidence
 from guarded_harness.gate import Gate
 from guarded_harness.sandbox import CommandResult, CommandSpec, Sandbox, SandboxRejection
+from guarded_harness.tools import ControlledRunTest
 
 
 def make_sandbox(mini) -> Sandbox:
@@ -197,18 +206,15 @@ class TestFilesetDigest:
 
 class TestRunTestIntegrity:
     def test_guarded_paths_outside_evidence_are_audited(self, ctx):
-        import json
-
-        from conftest import call_id
-
-        from guarded_harness.tools import ControlledRunTest
-
         root = ctx.sandbox.workspace_root
         (root / ".env").write_text("original secret")
         (root / "old.lock").write_text("old")
+        (root / "mode.lock").touch()
+        (root / "mode.lock").chmod(0o644)
         ctx.sandbox = Sandbox(root, {"mutate": CommandSpec(
             "mutate", [sys.executable, "-c", "from pathlib import Path; "
                        "Path('.env').write_text('changed secret'); "
+                       "Path('mode.lock').chmod(0o600); "
                        "Path('old.lock').unlink(); Path('new.lock').touch()"], 30,
         )}, sensitive_paths=[".env"], protected_patterns=["*.lock"])
         ctx.task.test_commands = {"default": "mutate"}
@@ -220,7 +226,47 @@ class TestRunTestIntegrity:
         assert not ctx.evidence[-1].passed
         record, = [r for _, r in ctx.audit.read_all() if r.rule == "sandbox.test_guarded_paths_changed"]
         assert record.tool_call_id == "guarded-test"
-        assert json.loads(record.detail) == {"added": ["new.lock"], "modified": [".env"], "deleted": ["old.lock"]}
+        assert json.loads(record.detail) == {
+            "added": ["new.lock"], "modified": [".env", "mode.lock"], "deleted": ["old.lock"],
+        }
+
+    @pytest.mark.parametrize("phase", ["before", "after"])
+    def test_unreadable_guarded_file_invalidates_test_evidence(self, ctx, monkeypatch, phase):
+        root = ctx.sandbox.workspace_root
+        guarded = root / "protected.lock"
+        guarded.touch()
+        marker = root / "ran"
+        ctx.sandbox = Sandbox(root, {"probe": CommandSpec(
+            "probe", [sys.executable, "-c", "from pathlib import Path; Path('ran').touch()"], 30,
+        )}, protected_patterns=["*.lock"])
+        ctx.task.test_commands = {"default": "probe"}
+        ctx.task.evidence_patterns = ["src/**"]
+        tool = ControlledRunTest(ctx)
+        with call_id("earlier-pass"):
+            assert "PASS" in tool(scope="default")
+        marker.unlink()
+        read_bytes = Path.read_bytes
+
+        def deny_guarded_read(path):
+            if path == guarded and (phase == "before" or marker.exists()):
+                raise PermissionError(errno.EACCES, "Permission denied", str(path))
+            return read_bytes(path)
+
+        monkeypatch.setattr(Path, "read_bytes", deny_guarded_read)
+        with call_id("snapshot-failure"):
+            observation = tool(scope="default")
+        exit_code = 0 if phase == "after" else None
+        assert f"FAIL (exit_code={exit_code})" in observation
+        assert marker.exists() == (phase == "after")
+        latest = latest_test_evidence(ctx, "default")
+        assert latest is not None and not latest.passed and latest.tool_call_id == "snapshot-failure"
+        assert latest.exit_code == exit_code and latest.content_digest is None
+        record, = [r for _, r in ctx.audit.read_all() if r.rule == "sandbox.test_snapshot_failed"]
+        assert record.tool_call_id == "snapshot-failure"
+        assert json.loads(record.detail) == {
+            "phase": phase, "path": "protected.lock", "error": "PermissionError",
+            "scope": "default", "command_id": "probe", "exit_code": exit_code,
+        }
 
     def test_content_change_during_test_not_recorded_as_pass(self, mini):
         """测试前后核对受测内容：执行中被改动的内容不登记有效通过。"""

@@ -234,6 +234,28 @@ class ControlledRunTest(Tool):
         super().__init__()
         self.ctx = ctx
 
+    def _snapshot(self) -> tuple[str, dict[str, str]]:
+        ctx = self.ctx
+        return (ctx.sandbox.digest_fileset(ctx.task.evidence_patterns, ctx.task.evidence_excludes),
+                ctx.sandbox.guarded_path_snapshot())
+
+    def _snapshot_failed(self, scope: str, command_id: str, phase: str, error: OSError,
+                         exit_code: int | None = None) -> str:
+        ctx = self.ctx
+        path = Path(error.filename) if error.filename else None
+        if path is not None and path.is_relative_to(ctx.sandbox.workspace_root):
+            path = path.relative_to(ctx.sandbox.workspace_root)
+        detail = {"scope": scope, "command_id": command_id, "phase": phase,
+                  "path": str(path) if path is not None else None,
+                  "error": type(error).__name__, "exit_code": exit_code}
+        ctx.record("sandbox.test_snapshot_failed", Decision.REJECT, Actor.HARNESS, json.dumps(detail))
+        summary = f"Test snapshot failed {phase} execution ({type(error).__name__})"
+        ctx.evidence.append(Evidence(
+            kind="test_run", scope=scope, command_id=command_id, exit_code=exit_code, passed=False,
+            output_summary=summary, tool_call_id=current_tool_call_id.get(), timestamp=time(),
+        ))
+        return f"run_test[{scope}] FAIL (exit_code={exit_code})\n{summary}"
+
     def forward(self, scope: str) -> str:
         ctx = self.ctx
         rejection = ctx.gate.check(self.name, {"scope": scope})
@@ -243,16 +265,20 @@ class ControlledRunTest(Tool):
         if command_id is None:
             return _rejection_observation(ctx, "sandbox.cmd_not_allowed",
                                           f"Rejected: test scope '{scope}' is not configured. Available: {sorted(ctx.task.test_commands)}.")
+        try:
+            digest_before, guarded_before = self._snapshot()
+        except OSError as error:
+            return self._snapshot_failed(scope, command_id, "before", error)
         ctx.record(f"tool.{self.name}", Decision.ALLOW, Actor.HARNESS, f"scope={scope} command={command_id}")
-        digest_before = ctx.sandbox.digest_fileset(ctx.task.evidence_patterns, ctx.task.evidence_excludes)
-        guarded_before = ctx.sandbox.guarded_path_snapshot()
         result = ctx.sandbox.run_command(command_id, cancel_event=ctx.cancel_event)
         if isinstance(result, SandboxRejection):
             return _rejection_observation(ctx, result.rule, result.message)
         assert isinstance(result, CommandResult)
-        digest_after = ctx.sandbox.digest_fileset(ctx.task.evidence_patterns, ctx.task.evidence_excludes)
+        try:
+            digest_after, guarded_after = self._snapshot()
+        except OSError as error:
+            return self._snapshot_failed(scope, command_id, "after", error, result.exit_code)
         content_unchanged = digest_after == digest_before
-        guarded_after = ctx.sandbox.guarded_path_snapshot()
         changes = {
             "added": sorted(guarded_after.keys() - guarded_before.keys()),
             "modified": sorted(p for p in guarded_before.keys() & guarded_after.keys()
