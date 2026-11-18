@@ -1,0 +1,8 @@
+.pi/project-memory.json
+.pi/.project-memory-*
+__pycache__/
+node_modules/
+dist/
+
+memory/
+.pi/project-memory.json.imported-*
