@@ -1,0 +1,16 @@
+/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-02/.venv/lib/python3.13/site-packages/jieba/__init__.py:44: SyntaxWarning: invalid escape sequence '\.'
+  re_han_default = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._%\-]+)", re.U)
+/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-02/.venv/lib/python3.13/site-packages/jieba/__init__.py:46: SyntaxWarning: invalid escape sequence '\s'
+  re_skip_default = re.compile("(\r\n|\s)", re.U)
+/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-02/.venv/lib/python3.13/site-packages/jieba/finalseg/__init__.py:78: SyntaxWarning: invalid escape sequence '\.'
+  re_skip = re.compile("([a-zA-Z0-9]+(?:\.\d+)?%?)")
+Generating embeddings:   0%|          | 0/21 [00:00<?, ?it/s]Generating embeddings:  48%|████▊     | 10/21 [00:00<00:01, 10.47it/s]Generating embeddings:  95%|█████████▌| 20/21 [00:01<00:00, 16.37it/s]Generating embeddings: 100%|██████████| 21/21 [00:01<00:00, 14.40it/s]
+索引目录：/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-02/storage/v1
+语料版本：06581de6c669
+向量 / BM25：各 21 个节点，共用同批分块和节点 ID。
+分块样例 [docs/session-rules.md § 登录会话有效期规则 > 有效期长度]
+## 有效期长度
+
+- 管理后台的登录会话有效期为 30 分钟。
+- 计时方式：从签发时刻开始计算，30 分钟后到期。
+- 空闲会话不自动续期，必须由用户请求触发刷新。

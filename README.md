@@ -1,6 +1,6 @@
 # 极客时间 AI Agent 训练营 · 课后作业仓库
 
-收录训练营各次课程的实战作业。每个作业一个独立目录，自带完整源码、启动指南、测试与验收脚本，互不共享运行环境。
+收录训练营各次课程的实战作业。各作业提供源码、运行说明和验收方式，按各自目录安装依赖。
 
 ## 作业索引
 
@@ -9,8 +9,9 @@
 | 1 | **Mini LLM Gateway**：OpenAI 协议兼容的 LLM 网关——同一 DeepSeek 供应商经 Anthropic Messages / OpenAI Responses 双协议接入（适配器模式），档位路由、SSE 流式、结构化输出、Prompt 版本管理、Token/延迟可观测、指数退避与按模型限流 | week01 | ✅ | [`mini_llm_gateway/`](mini_llm_gateway/README.md) |
 | 2 | **工具治理框架 · 转账工具**：在课程治理框架上新增 transfer 工具，跑通参数校验 → 业务预检 → 权限判断 → 人工审批 → 超时处理 → 结果脱敏 → 审计追踪全链路；附幂等去重、并发一致性、租户隔离、错误码语义等加固 | week02 | ✅ | [`governance/`](governance/README.md) |
 | 3 | **Guarded Harness**：基于 smolagents 1.26.0（不改核心源码）为 ToolCallingAgent 外挂可恢复护栏——门禁（参数/重复）、沙箱（路径逃逸/命令白名单/进程组）、审批挂起与工程侧代执行、检查点跨进程恢复、审计链、程序侧完成验收；真模型跑通测试修复与代码理解两类任务 | week03 | ✅ | [`guarded_harness/`](guarded_harness/README.md) |
+| 4 | **项目长期记忆与混合检索**：pi 跨会话读写项目记忆，基于 LlamaIndex 比较向量、BM25 关键词与 RRF 混合检索，并验证更新语料后的引用 | 第四章 | ✅ | [作业四总览](chapter04/README.md) |
 
-作业要求原文档（课程下发，存于 [`assignments/`](assignments/)）：[作业一](<assignments/AI Agent 全栈工程师训练营-作业一.md>) · [作业二](<assignments/AI Agent 全栈工程师训练营-作业二.md>) · [作业三](<assignments/AI Agent 全栈工程师训练营-作业三.md>)
+作业要求原文档（课程下发，存于 [`assignments/`](assignments/)）：[作业一](<assignments/AI Agent 全栈工程师训练营-作业一.md>) · [作业二](<assignments/AI Agent 全栈工程师训练营-作业二.md>) · [作业三](<assignments/AI Agent 全栈工程师训练营-作业三.md>) · [作业四](<assignments/AI Agent 全栈工程师训练营-作业四.md>)
 
 作业一的一键验收（需先启动网关）：
 
@@ -39,9 +40,11 @@ uv run python -m pytest -q       # 作业测试集：六个测试文件 105 项�
 
 真模型运行（审批/恢复跨进程操作）与运行记录见 [`guarded_harness/records/`](guarded_harness/records/)。
 
+作业四的离线测试、真实模型复跑入口和两题证据见 [作业四总览](chapter04/README.md)。
+
 ## 仓库约定
 
-- **作业独立自包含**：每个作业目录自带 `pyproject.toml` / README（启动指南、curl 示例、验收方式）与测试，根目录不放任何项目配置
+- **作业独立自包含**：各项目目录自带所需依赖配置、README 和验收入口
 - [`CONTEXT.md`](CONTEXT.md)：领域术语表（档位、路由目标、协议适配器等概念的权威定义），随作业演进持续沉淀
 - [`docs/adr/`](docs/adr/)：架构决策记录（15 篇：SQLite 选型、模板版本不可变、双协议适配、退避语义、错误分段等）
 - [`AGENTS.md`](AGENTS.md)：面向 AI 协作的仓库说明（目录、命令、约定）
