@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2021",
+    "rootDir": ".",
+    "outDir": "dist/memory",
+    "noEmitOnError": true
+  },
+  "include": ["memory-store.ts"]
+}

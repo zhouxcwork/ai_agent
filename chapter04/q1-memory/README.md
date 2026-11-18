@@ -16,10 +16,13 @@ chapter04/
 │       │   ├── middleware/        # 令牌认证
 │       │   ├── repositories/、db/ # 用户查询和内存数据
 │       │   └── utils/、types/     # 密码、令牌和类型定义
-│       ├── package.json           # 沿用课程的依赖和构建命令
+│       ├── package.json           # 课程依赖和构建命令，新增记忆测试入口
 │       ├── package-lock.json      # 沿用课程的 npm 依赖锁文件
 │       ├── tsconfig.json          # 沿用课程的 TypeScript 构建配置
 │       ├── extension.ts           # 本次新增的 pi 长期记忆扩展
+│       ├── memory-store.ts        # Markdown 持久化及查询逻辑
+│       ├── memory-store.test.cjs  # 无模型的跨进程回归测试
+│       ├── tsconfig.memory.json   # 回归测试编译配置
 │       ├── test_session.py        # 本次新增的登录会话测试
 │       ├── TESTING.md             # 本次新增的测试说明
 │       └── .gitignore             # 本次新增的运行产物忽略规则
@@ -36,7 +39,7 @@ chapter04/
             └── testing/session-tests.md
 ```
 
-课程底座来自 3-1 的 `code/chapter03/01/login_demo`。交付版的 `src/`、`package.json`、`package-lock.json` 和 `tsconfig.json` 与课程副本一致，已完整包含在 [login_demo/](login_demo/) 中。课程项目原来没有会话测试，本次新增的 [test_session.py](login_demo/test_session.py) 会启动课程应用，验证实际的登录和认证行为。
+课程底座来自 3-1 的 `code/chapter03/01/login_demo`。交付版的 `src/`、`package-lock.json` 和 `tsconfig.json` 与课程副本一致，`package.json` 在课程配置上增加了 `test:memory` 脚本，已完整包含在 [login_demo/](login_demo/) 中。课程项目原来没有会话测试，本次新增的 [test_session.py](login_demo/test_session.py) 会启动课程应用，验证实际的登录和认证行为。
 
 交付源码保留迁移前的测试入口。复跑时，才会把它移到 `tests/auth/test_session.py`，并生成 `login_demo/memory/`。
 
@@ -52,6 +55,17 @@ python -m unittest -v test_session.py
 
 预期 3 项全部通过。可用 `npm start` 单独启动服务，访问 `http://localhost:3001/health`。测试会自行在回环地址启动构建好的应用并选取空闲端口。直接跑测试无需 pi 或模型凭据。
 
+## 长期记忆自动化回归
+
+在 `login_demo/` 运行：
+
+```bash
+npm ci
+npm run test:memory
+```
+
+预期 3 组用例通过。测试使用临时项目目录和独立 Node.js 进程，覆盖空库、写入、跨进程回读、项目隔离、原地更新、删除及旧 JSON 导入。已安装依赖后可离线运行，无需 pi 或 DeepSeek 凭据。下节的 pi 复跑用于验证真实模型对题面指令的执行效果。
+
 ## 复跑
 
 进入 `login_demo/` 后，复制样本到临时目录。每次验收用一个新副本。
@@ -60,7 +74,7 @@ python -m unittest -v test_session.py
 run_dir="$(mktemp -d /tmp/login-demo.XXXXXX)"
 mkdir "$run_dir/login_demo"
 cp -R src "$run_dir/login_demo/"
-cp package.json package-lock.json tsconfig.json extension.ts test_session.py TESTING.md "$run_dir/login_demo/"
+cp package.json package-lock.json tsconfig.json tsconfig.memory.json extension.ts memory-store.ts memory-store.test.cjs test_session.py TESTING.md "$run_dir/login_demo/"
 cd "$run_dir/login_demo"
 npm ci && npm run build && python -m unittest -v test_session.py
 ```
