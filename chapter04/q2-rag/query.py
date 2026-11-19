@@ -39,6 +39,26 @@ def validate_citations(answer: str, count: int) -> list[int]:
     return list(dict.fromkeys(map(int, markers)))
 
 
+# 只识别明确归属于登录会话的时长，避免把同段的支付会话时长算作支持证据。
+LOGIN_TTL = re.compile(
+    r"登录会话(?:的?有效期(?:为|是|[:：])|；有效期是)?\s*([0-9]+)\s*分钟"
+)
+ANSWER_MINUTES = re.compile(r"(?<![0-9.+−-])([0-9]+(?:\.[0-9]+)?)\s*分钟")
+
+
+def validate_login_ttl(question: str, answer: str, cited_nodes) -> None:
+    if question.strip().rstrip("？?") != QUESTION.rstrip("？"):
+        return
+    claimed = set(ANSWER_MINUTES.findall(answer))
+    supported = {
+        minutes
+        for node in cited_nodes
+        for minutes in LOGIN_TTL.findall(node.text)
+    }
+    if len(claimed) != 1 or claimed != supported:
+        raise ValueError("引用证据不支持回答中的登录会话有效期")
+
+
 def generate(question, hits):
     evidence = "\n\n".join(f"[{i}] {label(hit)}\n{hit.node.text}" for i, hit in enumerate(hits, 1))
     prompt = (
@@ -73,6 +93,7 @@ def query(store: Path, question: str):
             print(f"{number}. {label(hit)} | {summary}")
     answer = generate(question, mixed)
     citations = validate_citations(answer, len(mixed))
+    validate_login_ttl(question, answer, [mixed[number - 1].node for number in citations])
     print(f"\n回答（DeepSeek Flash）：{answer}\n")
     for number in citations:
         hit = mixed[number - 1]

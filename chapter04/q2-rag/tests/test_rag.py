@@ -6,7 +6,7 @@ from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.schema import NodeWithScore, TextNode
 
 from ingest import build
-from query import load_bundle, validate_citations
+from query import QUESTION, load_bundle, validate_citations, validate_login_ttl
 from rag.hybrid import BM25Retriever, rrf_fuse
 from update_corpus import update
 from verify_update import verify
@@ -40,6 +40,23 @@ class RagTests(unittest.TestCase):
         for answer in ("", "无引用", "[0]", "[3]", "[unknown]"):
             with self.subTest(answer=answer), self.assertRaises(ValueError):
                 validate_citations(answer, 2)
+
+    def test_login_ttl_requires_support_from_cited_nodes(self):
+        rule = TextNode(text="管理后台的登录会话有效期为 20 分钟。")
+        comparison = TextNode(text="登录会话 20 分钟、可续期；支付会话 5 分钟。")
+        payment = TextNode(text="支付会话的有效期为 5 分钟。")
+        stale = TextNode(text="登录会话有效期为 30 分钟。")
+        validate_login_ttl(QUESTION, "登录会话有效期为 20 分钟。[1]", [rule])
+        validate_login_ttl(QUESTION, "登录会话有效期为 20 分钟。[1]", [comparison])
+        for answer, nodes in (
+            ("登录会话有效期为 99 分钟。[1]", [rule]),
+            ("登录会话有效期为 5 分钟。[1]", [payment]),
+            ("登录会话有效期为 5 分钟。[1]", [comparison]),
+            ("登录会话有效期为 20 分钟。[1][2]", [rule, stale]),
+        ):
+            with self.subTest(answer=answer), self.assertRaisesRegex(ValueError, "证据不支持"):
+                validate_login_ttl(QUESTION, answer, nodes)
+        validate_login_ttl("支付会话的有效期是多少分钟？", "5 分钟。[1]", [payment])
 
 
 if __name__ == "__main__":
