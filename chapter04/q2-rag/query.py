@@ -43,20 +43,25 @@ def validate_citations(answer: str, count: int) -> list[int]:
 LOGIN_TTL = re.compile(
     r"登录会话(?:的?有效期(?:为|是|[:：])|；有效期是)?\s*([0-9]+)\s*分钟"
 )
-ANSWER_MINUTES = re.compile(r"(?<![0-9.+−-])([0-9]+(?:\.[0-9]+)?)\s*分钟")
+LOGIN_TTL_QUESTION = re.compile(r"登录会话的?有效期是?(?:多少|几)分钟[？?]?")
 
 
-def validate_login_ttl(question: str, answer: str, cited_nodes) -> None:
-    if question.strip().rstrip("？?") != QUESTION.rstrip("？"):
-        return
-    claimed = set(ANSWER_MINUTES.findall(answer))
-    supported = {
-        minutes
-        for node in cited_nodes
-        for minutes in LOGIN_TTL.findall(node.text)
+def ground_answer(question: str, answer: str, hits) -> tuple[str, list[int]]:
+    citations = validate_citations(answer, len(hits))
+    if not LOGIN_TTL_QUESTION.fullmatch(re.sub(r"\s+", "", question)):
+        return answer, citations
+
+    evidence = {
+        number: set(LOGIN_TTL.findall(hits[number - 1].node.text))
+        for number in citations
     }
-    if len(claimed) != 1 or claimed != supported:
-        raise ValueError("引用证据不支持回答中的登录会话有效期")
+    supported = set().union(*evidence.values())
+    if len(supported) != 1:
+        raise ValueError("引用证据不支持唯一的登录会话有效期")
+    minutes = supported.pop()
+    supporting_ids = [number for number, values in evidence.items() if minutes in values]
+    markers = "".join(f"[{number}]" for number in supporting_ids)
+    return f"登录会话的有效期为 {minutes} 分钟。{markers}", supporting_ids
 
 
 def generate(question, hits):
@@ -91,10 +96,8 @@ def query(store: Path, question: str):
         for number, hit in enumerate(hits[:5], 1):
             summary = " ".join(hit.node.text.split())[:85]
             print(f"{number}. {label(hit)} | {summary}")
-    answer = generate(question, mixed)
-    citations = validate_citations(answer, len(mixed))
-    validate_login_ttl(question, answer, [mixed[number - 1].node for number in citations])
-    print(f"\n回答（DeepSeek Flash）：{answer}\n")
+    answer, citations = ground_answer(question, generate(question, mixed), mixed)
+    print(f"\n回答（DeepSeek Flash + 证据校对）：{answer}\n")
     for number in citations:
         hit = mixed[number - 1]
         print(f"[{number}] {label(hit)}\n{hit.node.text}\n")

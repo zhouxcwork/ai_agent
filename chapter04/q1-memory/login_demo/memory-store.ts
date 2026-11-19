@@ -143,8 +143,8 @@ export async function executeMemory(
   const legacy = await readLegacy(legacyPath);
   const records = new Map([...legacy, ...pages]);
   const existing = records.get(id);
-  const result = (status: string, saved?: MemoryRecord, path = storagePath) => {
-    const details = { status, action, id, storagePath: path, record: saved };
+  const result = (status: string, saved?: MemoryRecord, path = storagePath, warning?: string) => {
+    const details = { status, action, id, storagePath: path, record: saved, warning };
     return { content: [{ type: "text" as const, text: JSON.stringify(details, null, 2) }], details };
   };
 
@@ -157,7 +157,25 @@ export async function executeMemory(
     return result("not_found");
   }
   if (requested === undefined && action === "delete") throw new Error("删除时必须提供记录 ID。");
-  if (action === "write" && existing) return result("already_exists", existing, pages.has(id) ? storagePath : legacyPath);
+  const day = new Date().toLocaleDateString("en-CA");
+  if (action === "write" && existing) {
+    if (!pages.has(id)) return result("already_exists", existing, legacyPath);
+    const event = `- 补齐「${titleOf(id)}」的索引与日志。`;
+    try {
+      const index = await readOptional(join(root, "index.md"));
+      const log = await readOptional(join(root, "log.md"));
+      const hasLog = log?.split("\n").some((line) =>
+        line.startsWith(`- 写入「${titleOf(id)}」`) || line === event
+      );
+      if (!index?.includes(`](testing/${pageName(id)})`) || !hasLog) {
+        await updateIndexAndLog(root, [...pages.keys()], event, day);
+        return result("recovered", existing);
+      }
+      return result("already_exists", existing);
+    } catch {
+      return result("saved_with_warning", existing, storagePath, "正文已保存，索引或日志未同步，请重试写入同一 ID。");
+    }
+  }
   if (action !== "write" && !existing) return result("not_found");
   if (action !== "delete") {
     if (!isRecord(record)) throw new Error("请提供项目相对路径、实跑命令和来源。");
@@ -187,6 +205,11 @@ export async function executeMemory(
   const imported = legacy.size ? `- 导入旧 JSON 记忆 ${legacy.size} 条。\n` : "";
   const summary = record?.verification ? `，${record.verification.replace(/\s+/g, " ")}` : "";
   const event = `${imported}- ${operation}「${titleOf(id)}」${pathChange}${summary}。`;
-  await updateIndexAndLog(root, [...records.keys()], event, now.toLocaleDateString("en-CA"));
+  try {
+    await updateIndexAndLog(root, [...records.keys()], event, day);
+  } catch (error) {
+    if (action !== "write") throw error;
+    return result("saved_with_warning", record, storagePath, "正文已保存，索引或日志未同步，请重试写入同一 ID。");
+  }
   return result({ write: "written", update: "updated", delete: "deleted" }[action], action === "delete" ? undefined : record);
 }

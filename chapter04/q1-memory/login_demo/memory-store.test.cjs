@@ -117,3 +117,25 @@ test("旧 JSON 可回读，更新后用 Markdown 持久化", async (t) => {
   assert.deepEqual(JSON.parse(await readFile(join(legacyDir, backup), "utf8")),
     { "chapter04-login-demo-session-tests": initial });
 });
+
+test("正文写入后索引失败，同 ID 重试恢复索引且不重复写正文", async (t) => {
+  const root = await createProject(t);
+  await writeFile(join(root, initial.testPath), "# test\n");
+  await writeFile(join(root, "TESTING.md"), initial.command);
+  const index = join(root, "memory/index.md");
+  await mkdir(index, { recursive: true });
+
+  const request = { action: "write", id, record: initial };
+  const first = await projectMemory(root, request);
+  assert.equal(first.status, "saved_with_warning");
+  assert.match(first.warning, /正文已保存/);
+  const original = await readFile(first.storagePath, "utf8");
+  assert.equal((await projectMemory(root, { action: "read", id })).status, "found");
+
+  await rm(index, { recursive: true });
+  assert.equal((await projectMemory(root, request)).status, "recovered");
+  assert.equal(await readFile(first.storagePath, "utf8"), original);
+  assert.match(await readFile(index, "utf8"), /testing\/session-tests\.md/);
+  assert.match(await readFile(join(root, "memory/log.md"), "utf8"), /补齐「登录会话测试」/);
+  assert.equal((await projectMemory(root, request)).status, "already_exists");
+});

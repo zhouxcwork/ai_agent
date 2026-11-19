@@ -4,8 +4,8 @@
 更新 docs/session-rules.md
 更新 docs/testing-guide.md
 更新 tables/session-matrix.csv
-Generating embeddings:   0%|          | 0/21 [00:00<?, ?it/s]Generating embeddings:  48%|████▊     | 10/21 [00:00<00:00, 18.32it/s]Generating embeddings:  95%|█████████▌| 20/21 [00:00<00:00, 23.76it/s]Generating embeddings: 100%|██████████| 21/21 [00:01<00:00, 20.18it/s]
-索引目录：/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-02/storage/v2
+Generating embeddings:   0%|          | 0/21 [00:00<?, ?it/s]Generating embeddings:  48%|████▊     | 10/21 [00:00<00:00, 15.77it/s]Generating embeddings:  95%|█████████▌| 20/21 [00:00<00:00, 22.90it/s]Generating embeddings: 100%|██████████| 21/21 [00:01<00:00, 19.59it/s]
+索引目录：/Users/zhouxincheng/Documents/geekbang/homework/test-q2/storage/v2
 语料版本：e35f1407b364
 向量 / BM25：各 21 个节点，共用同批分块和节点 ID。
 分块样例 [docs/session-rules.md § 登录会话有效期规则 > 有效期长度]
@@ -16,7 +16,7 @@
 - 空闲会话不自动续期，必须由用户请求触发刷新。
 版本 06581de6c669 → e35f1407b364。两路分别核对节点 ID 和正文，7 个旧时长分块均已退出新版。
 问题：登录会话的有效期是多少分钟？
-索引：/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-02/storage/v2 · e35f1407b364
+索引：/Users/zhouxincheng/Documents/geekbang/homework/test-q2/storage/v2 · e35f1407b364
 
 向量前 5 条（实际展示 5 条）
 1. docs/session-rules.md § 登录会话有效期规则 > 有效期长度 | ## 有效期长度 - 管理后台的登录会话有效期为 20 分钟。 - 计时方式：从签发时刻开始计算，20 分钟后到期。 - 空闲会话不自动续期，必须由用户请求触发刷新。
@@ -37,9 +37,9 @@ RRF 混合前 5 条（实际展示 5 条）
 2. tables/session-matrix.csv § (正文) | 服务是login_demo；会话类型是登录会话；有效期是20 分钟；可续期是是；到期边界处理是恰好到期视为无效；负责人是认证组。 服务是pay_gateway；会话类型是
 3. docs/session-rules.md § 登录会话有效期规则 | # 登录会话有效期规则 适用服务：login_demo 登录服务。
 4. docs/faq.md § 常见问题（FAQ） > 用户反馈"登录状态老是掉" | ## 用户反馈"登录状态老是掉" 1. 先确认会话有效期配置是否被改过，默认 20 分钟。 2. 再看是不是恰好卡在到期时刻被判定为无效，检查边界用例。 3. 最后确认前
-5. docs/payment-session.md § 支付会话规则 > 与登录会话的区别 | ## 与登录会话的区别 - 登录会话 20 分钟、可续期；支付会话 5 分钟、不可续期。 - 两者共用 `expires_at` 字段名，排查问题时先确认是哪个服务的会话
+5. app/session.py § (整文件) | """登录会话的判定实现。 本模块只负责"令牌是否仍然有效"的判断，不负责签发和存储。 """ SESSION_TTL_SECONDS = 20 * 60 # 登录会话有
 
-回答（DeepSeek Flash）：登录会话有效期为 20 分钟。[1][2][5]
+回答（DeepSeek Flash + 证据校对）：登录会话的有效期为 20 分钟。[1][2]
 
 [1] docs/session-rules.md § 登录会话有效期规则 > 有效期长度
 ## 有效期长度
@@ -53,10 +53,4 @@ RRF 混合前 5 条（实际展示 5 条）
 服务是pay_gateway；会话类型是支付会话；有效期是5 分钟；可续期是否；到期边界处理是到期即置为超时；负责人是支付组。
 服务是login_demo；会话类型是匿名浏览会话；有效期是120 分钟；可续期是是；到期边界处理是到期后重新签发；负责人是认证组。
 服务是login_demo；会话类型是记住我令牌；有效期是30 天；可续期是是；到期边界处理是到期需重新登录；负责人是认证组。
-
-[5] docs/payment-session.md § 支付会话规则 > 与登录会话的区别
-## 与登录会话的区别
-
-- 登录会话 20 分钟、可续期；支付会话 5 分钟、不可续期。
-- 两者共用 `expires_at` 字段名，排查问题时先确认是哪个服务的会话。
 

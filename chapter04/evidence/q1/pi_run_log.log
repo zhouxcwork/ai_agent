@@ -1,4 +1,4 @@
-zhouxincheng@zhouxinchengdeMacBook-Pro login_demo % pi  --model deepseek/deepseek-flash   --no-session --no-extensions -e ./extension.ts
+zhouxincheng@zhouxinchengdeMacBook-Pro test-q1 % pi   --model deepseek/deepseek-flash   --no-session --no-extensions -e ./extension.ts
 
  ▀▀█  v1.5.0
  █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more
@@ -37,60 +37,17 @@ to-questionnaire, to-spec, to-tickets, triage, update-ai-tools, wait-what, wayfi
  读取当前项目的会话测试文件和测试说明，将测试路径和运行命令保存到项目长期记忆，附上来源。返回实际保存路径。
 
 
- Let me look at the current directory.
+ Let me look at the current working directory.
 
 
  $ pwd && ls -la (timeout 15s)
 
- ... (10 earlier lines, ctrl+o to expand)
- -rw-r--r--@   1 zhouxincheng  staff    492 Nov 18 09:21 package.json
- drwxr-xr-x@  11 zhouxincheng  staff    352 Nov 18 09:21 src
- -rw-r--r--@   1 zhouxincheng  staff   3050 Nov 18 09:21 test_session.py
- -rw-r--r--@   1 zhouxincheng  staff    379 Nov 18 09:21 TESTING.md
- -rw-r--r--@   1 zhouxincheng  staff    315 Nov 18 09:21 tsconfig.json
-
- Took 0.0s
-
-
-
- $ find . -maxdepth 3 -iname "*test*" -o -maxdepth 3 -iname "*README*" -o -maxdepth 3 -iname "*.md" | head -50 (timeout 15s)
-
- ... (45 earlier lines, ctrl+o to expand)
- ./node_modules/acorn/README.md
- ./node_modules/express/History.md
- ./node_modules/express/Readme.md
- ./node_modules/encodeurl/README.md
- ./node_modules/once/README.md
-
- Took 0.0s
-
-
-
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/TESTING.md:1-60
-
-
-
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/test_session.py:1-120
-
-
- Now check package.json for build/test scripts, and confirm path relative to project root. What is "project root" for project_memory? It says "从 pi 启动目录读写本项目
- Markdown 记忆" — cwd is login_demo. But testPath is "相对项目根目录". Hmm, project root likely the pi startup directory = cwd = login_demo. Let me check if there's a
- memory dir. Also check package.json.
-
- Let me also actually run the test to provide verification? The instruction says only register actually-verified paths, commands, sources and actual test results. I
- should run it to verify. Let's try building and running. That may take time but ok.
-
- First read package.json.
-
-
- $ cat package.json && ls src dist | head -30 (timeout 20s)
-
- ... (35 earlier lines, ctrl+o to expand)
- routes
- server.ts
- services
- types
- utils
+ ... (14 earlier lines, ctrl+o to expand)
+ drwxr-xr-x@  12 zhouxincheng  staff    384 Nov 19 09:17 src
+ -rw-r--r--@   1 zhouxincheng  staff   3050 Nov 18 09:42 test_session.py
+ -rw-r--r--@   1 zhouxincheng  staff    379 Nov 18 00:19 TESTING.md
+ -rw-r--r--@   1 zhouxincheng  staff    315 Nov 18 00:18 tsconfig.json
+ -rw-r--r--@   1 zhouxincheng  staff    196 Nov 18 10:41 tsconfig.memory.json
 
  Took 0.0s
 
@@ -101,24 +58,30 @@ to-questionnaire, to-spec, to-tickets, triage, update-ai-tools, wait-what, wayfi
    "status": "not_found",
    "action": "read",
    "id": "session-test-entry",
-   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/testing/session-tests.md"
+   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/test-q1/memory/testing/session-tests.md"
  }
 
 
- Run the documented test to verify. Build first.
+
+ read TESTING.md
 
 
- $ npm run build 2>&1 | tail -5 && python -m unittest -v test_session.py 2>&1 | tail -15 (timeout 180s)
 
- ... (6 earlier lines, ctrl+o to expand)
+ read test_session.py
 
- ----------------------------------------------------------------------
- Ran 3 tests in 0.131s
 
- OK
 
- Took 0.8s
+ read memory-store.test.cjs
 
+
+ TESTING.md says test entry test_session.py, run python -m unittest -v test_session.py. Sources: test_session.py and TESTING.md.
+
+ Should I actually run the test to record verification? The tool says write/update only register verified paths, commands, sources, and actual test results. Optionally
+ run. The user asked to save path and run command with sources. Let me verify files exist (already read them). Maybe run the test? Building dist may be needed. dist
+ exists. Let's try running to provide verification — but user didn't ask. It's optional. I'll just write without verification since not run. Actually "verification: 本次
+ 实际观察到的测试结果。未运行时省略" — so omit if not run.
+
+ Let me write.
 
 
  project_memory action="write" id="session-test-entry" record={"testPath":"test_session.py","command":"python -m ...
@@ -126,31 +89,34 @@ to-questionnaire, to-spec, to-tickets, triage, update-ai-tools, wait-what, wayfi
    "status": "written",
    "action": "write",
    "id": "session-test-entry",
-   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/testing/session-tests.md",
+   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/test-q1/memory/testing/session-tests.md",
    "record": {
      "testPath": "test_session.py",
      "command": "python -m unittest -v test_session.py",
      "sources": [
        "test_session.py",
- ... (11 more lines, ctrl+o to expand)
+ ... (9 more lines, ctrl+o to expand)
 
 
  已保存到项目长期记忆。
 
- - 记忆文件：/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/testing/session-tests.md（ID: session-test-entry）
- - 测试路径：test_session.py（相对项目根目录，即当前启动目录 login_demo/）
- - 运行命令：python -m unittest -v test_session.py（前置：npm ci + npm run build，见 TESTING.md）
- - 来源：test_session.py、TESTING.md、package.json
- - 实测：npm run build 成功；测试 Ran 3 tests in 0.131s, OK，覆盖登录取 token 访问 profile、无令牌 401、错误密码 401 三个场景
+ - 记忆文件: /Users/zhouxincheng/Documents/geekbang/homework/test-q1/memory/testing/session-tests.md
+ - ID: session-test-entry
+ - 测试路径: test_session.py
+ - 运行命令: python -m unittest -v test_session.py
+ - 来源: test_session.py、TESTING.md（TESTING.md 另说明需先 npm ci && npm run build）
+ - 覆盖场景: 登录后访问个人资料 200、无令牌 401、错误密码 401
+
+ 未实际执行测试，故记录中未写入 verification 字段。
 
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-~/Documents/geekbang/homework/chapter04/test-01/login_demo (master)
-↑2.9k ↓1.1k R53k CH96.8% $0.002 1.1%/1.0M (auto)                                                                                          (deepseek) deepseek-flash • high
-zhouxincheng@zhouxinchengdeMacBook-Pro login_demo % #第二次执行
-zsh: command not found: #第二次执行
-zhouxincheng@zhouxinchengdeMacBook-Pro login_demo % pi  --model deepseek/deepseek-flash   --no-session --no-extensions -e ./extension.ts
+~/Documents/geekbang/homework/test-q1 (master)
+↑5.1k ↓759 R32k CH98.3% $0.003 1.1%/1.0M (auto)                                                                                           (deepseek) deepseek-flash • high
+zhouxincheng@zhouxinchengdeMacBook-Pro test-q1 %
+zhouxincheng@zhouxinchengdeMacBook-Pro test-q1 %
+zhouxincheng@zhouxinchengdeMacBook-Pro test-q1 % pi   --model deepseek/deepseek-flash   --no-session --no-extensions -e ./extension.ts
 
  ▀▀█  v1.5.0
  █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more
@@ -170,85 +136,94 @@ to-questionnaire, to-spec, to-tickets, triage, update-ai-tools, wait-what, wayfi
 
 [Extensions]
   extension.ts
-
-
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Update Available
- New version 1.5.2 is available. Run pi update
- Changelog: https://pi.dev/changelog
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Package Updates Available
- Package updates are available. Run pi update --extensions
- Packages:
- - pi-sandbox
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
  从当前项目长期记忆中查找会话测试入口，再核对当前文件是否存在。
 
 
- Let me read the project memory.
+ The user wants me to look up session test entry from project memory, then verify the file exists.
+
+ Let me read project memory.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 1.5.2 is available. Run pi update
+ Changelog: https://pi.dev/changelog
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Package Updates Available
+ Package updates are available. Run pi update --extensions
+ Packages:
+ - pi-sandbox
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
- project_memory action="read"
+ project_memory action="read" id="session-test-entry"
  {
    "status": "found",
    "action": "read",
    "id": "session-test-entry",
-   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/testing/session-tests.md",
+   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/test-q1/memory/testing/session-tests.md",
    "record": {
      "testPath": "test_session.py",
      "command": "python -m unittest -v test_session.py",
      "sources": [
        "test_session.py",
- ... (11 more lines, ctrl+o to expand)
+ ... (9 more lines, ctrl+o to expand)
 
 
 
- $ ls -la; echo "---"; ls -l test_session.py TESTING.md package.json 2>&1
+ $ pwd && ls -la (timeout 15s)
 
  ... (15 earlier lines, ctrl+o to expand)
- -rw-r--r--@   1 zhouxincheng  staff    315 Nov 18 09:21 tsconfig.json
- ---
- -rw-r--r--@ 1 zhouxincheng  staff   492 Nov 18 09:21 package.json
- -rw-r--r--@ 1 zhouxincheng  staff  3050 Nov 18 09:21 test_session.py
- -rw-r--r--@ 1 zhouxincheng  staff   379 Nov 18 09:21 TESTING.md
+ drwxr-xr-x@  12 zhouxincheng  staff    384 Nov 19 09:17 src
+ -rw-r--r--@   1 zhouxincheng  staff   3050 Nov 18 09:42 test_session.py
+ -rw-r--r--@   1 zhouxincheng  staff    379 Nov 18 00:19 TESTING.md
+ -rw-r--r--@   1 zhouxincheng  staff    315 Nov 18 00:18 tsconfig.json
+ -rw-r--r--@   1 zhouxincheng  staff    196 Nov 18 10:41 tsconfig.memory.json
 
  Took 0.0s
 
 
- 记忆条目与当前文件核对结果：
+ Verify file exists and sources exist: test_session.py exists, TESTING.md exists. Let me check content briefly and maybe run tests? The user only asked to verify file
+ exists. Let me read TESTING.md and head test_session.py to confirm consistency.
 
- 会话测试入口（来自 memory/testing/session-tests.md）
- - 测试路径：test_session.py
+
+ $ ls -l test_session.py TESTING.md && echo '--- TESTING.md ---' && cat TESTING.md && echo '--- tests ---' && grep -n 'def test' test_session.py (timeout 15s)
+
+ ... (18 earlier lines, ctrl+o to expand)
+ 测试会启动本项目的 Express 应用，覆盖正确登录后访问个人资料、无令牌访问被拒绝、错误密码登录被拒绝三个场景。
+ --- tests ---
+ 68:    def test_login_token_can_access_profile(self):
+ 75:    def test_profile_requires_token(self):
+ 79:    def test_invalid_credentials_are_rejected(self):
+
+ Took 0.0s
+
+
+ 长期记忆中的会话测试入口已找到，并已核对当前文件。
+
+ 记忆记录（memory/testing/session-tests.md）
+ - 测试入口：test_session.py
  - 命令：python -m unittest -v test_session.py
- - 来源：test_session.py、TESTING.md、package.json
- - 上次验证：先 npm run build 成功，再跑测试 Ran 3 tests ... OK（3 项全通过）
+ - 来源：test_session.py、TESTING.md
+ - 覆盖场景：登录成功后带 accessToken 访问 /api/profile 返回 200 且 userId=u_1001；无令牌访问返回 401；错误密码登录返回 401
 
- 文件核对（/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo）
+ 文件核对结果
+ - test_session.py ✅ 存在（3050 字节，Nov 18 09:42），且含三个对应测试方法，与记忆一致
+ - TESTING.md ✅ 存在（379 字节），文档中记录的入口与命令与记忆完全一致（但额外要求先执行 npm ci && npm run build）
 
- ┌─────────────────┬──────────────────────┐
- │ 记录中的文件    │ 是否存在             │
- ├─────────────────┼──────────────────────┤
- │ test_session.py │ ✅ 存在（3050 字节） │
- ├─────────────────┼──────────────────────┤
- │ TESTING.md      │ ✅ 存在（379 字节）  │
- ├─────────────────┼──────────────────────┤
- │ package.json    │ ✅ 存在（492 字节）  │
- └─────────────────┴──────────────────────┘
-
- 三个来源文件都在，记忆条目未失效。需要我重新实跑一遍 python -m unittest -v test_session.py 复核吗？
+ 需要注意：TESTING.md 显示测试依赖预构建的 Express 应用；当前目录存在 dist/ 和 node_modules/，因此可以直接运行测试。如果需要我实际运行一次，请告诉我。
 
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-~/Documents/geekbang/homework/chapter04/test-01/login_demo (master)
-↑1.2k ↓330 R22k CH91.2% $0.001 0.8%/1.0M (auto)                                                                                           (deepseek) deepseek-flash • high
-zhouxincheng@zhouxinchengdeMacBook-Pro login_demo % #第三次执行
-zsh: command not found: #第三次执行
-zhouxincheng@zhouxinchengdeMacBook-Pro login_demo % pi  --model deepseek/deepseek-flash   --no-session --no-extensions -e ./extension.ts
+~/Documents/geekbang/homework/test-q1 (master)
+↑1.3k ↓522 R23k CH96.6% $0.001 0.9%/1.0M (auto)                                                                                           (deepseek) deepseek-flash • high
+zhouxincheng@zhouxinchengdeMacBook-Pro test-q1 %
+zhouxincheng@zhouxinchengdeMacBook-Pro test-q1 %
+zhouxincheng@zhouxinchengdeMacBook-Pro test-q1 % pi   --model deepseek/deepseek-flash   --no-session --no-extensions -e ./extension.ts
 
  ▀▀█  v1.5.0
  █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more
@@ -271,36 +246,35 @@ to-questionnaire, to-spec, to-tickets, triage, update-ai-tools, wait-what, wayfi
 
 
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 1.5.2 is available. Run pi update
+ Changelog: https://pi.dev/changelog
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Package Updates Available
  Package updates are available. Run pi update --extensions
  Packages:
  - pi-sandbox
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Update Available
- New version 1.5.2 is available. Run pi update
- Changelog: https://pi.dev/changelog
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
  将会话测试迁移到 tests/auth/test_session.py，同步修改测试说明，运行新测试命令。根据实际结果更新原来的长期记忆。
 
 
- Let me start by exploring the project structure to understand what we're dealing with.
+ Let me look at the current state of the project.
 
 
- $ pwd && ls -la && echo "---" && find . -maxdepth 2 -type f -name "*.py" -o -maxdepth 2 -type f -name "*.md" -o -maxdepth 2 -type f -name "*.toml" -o -maxdepth 2 -type
- f -name "*.cfg" -o -maxdepth 2 -type f -name "*.ini" | head -50
+ $ cd /Users/zhouxincheng/Documents/geekbang/homework/test-q1 && ls -la && find . -type f -name "*.md" -not -path "*/node_modules/*" | head -50
 
- ... (17 earlier lines, ctrl+o to expand)
- ---
+ ... (18 earlier lines, ctrl+o to expand)
+ -rw-r--r--@   1 zhouxincheng  staff    196 Nov 18 10:41 tsconfig.memory.json
+ ./memory/testing/session-tests.md
  ./memory/log.md
  ./memory/index.md
- ./test_session.py
  ./TESTING.md
 
- Took 0.0s
+ Took 0.1s
 
 
 
@@ -309,174 +283,155 @@ to-questionnaire, to-spec, to-tickets, triage, update-ai-tools, wait-what, wayfi
    "status": "found",
    "action": "read",
    "id": "session-test-entry",
-   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/testing/session-tests.md",
+   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/test-q1/memory/testing/session-tests.md",
    "record": {
      "testPath": "test_session.py",
      "command": "python -m unittest -v test_session.py",
      "sources": [
        "test_session.py",
- ... (11 more lines, ctrl+o to expand)
+ ... (9 more lines, ctrl+o to expand)
 
 
- Now let's read the relevant files.
+ Let me read the files.
 
 
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/test_session.py:1-200
-
-
-
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/TESTING.md:1-200
+ read ~/Documents/geekbang/homework/test-q1/test_session.py
 
 
 
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/package.json:1-100
+ read ~/Documents/geekbang/homework/test-q1/TESTING.md
 
 
 
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/index.md:1-100
+ read ~/Documents/geekbang/homework/test-q1/memory/testing/session-tests.md
 
 
- Now read memory/testing/session-tests.md and log.md, plus check if tests/auth exists.
+ Now move test_session.py to tests/auth/test_session.py. Note the ROOT computation: Path(__file__).resolve().parents — finds first parent with package.json. After moving
+ to tests/auth/, parents are tests, test-q1 → still finds test-q1. Good.
+
+ Need init.py? For unittest, running python -m unittest -v tests/auth/test_session.py? Actually unittest module path needs package or file path. python -m unittest
+ tests.auth.test_session requires init.py (or namespace packages work? unittest discovery requires importable). Safer: add tests/__init__.py and tests/auth/__init__.py
+ so python -m unittest -v tests.auth.test_session works. Alternatively python -m unittest -v tests/auth/test_session.py — unittest converts path to module name
+ tests.auth.test_session, requiring package. Actually unittest's path conversion handles it and needs importability. Let's create init.py files.
+
+ Check other tests dirs conventions in repo? Let's check existing structure.
 
 
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/testing/session-tests.md:1-100
+ $ cd /Users/zhouxincheng/Documents/geekbang/homework/test-q1 && ls src && cat package.json && cat .gitignore && ls dist | head
 
-
-
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/log.md:1-100
-
-
-
- $ cd /Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo && ls -la tests 2>/dev/null || echo "no tests dir"; echo "---"; git status --short
- 2>/dev/null | head -20; echo "---"; cat .gitignore
-
- ... (9 earlier lines, ctrl+o to expand)
- node_modules/
- dist/
-
- memory/
- .pi/project-memory.json.imported-*
-
- Took 0.1s
-
-
- Interesting: memory/ is in .gitignore. But regardless, we should update memory.
-
- Task: migrate session tests to tests/auth/test_session.py, update test docs, run new test command, update long-term memory based on actual results.
-
- Need to consider:
- - ROOT computation in test_session.py: next(path for path in Path(__file__).resolve().parents if (path / "package.json").is_file()). If moved to
-   tests/auth/test_session.py, parents are: tests/auth, tests, project root. Project root has package.json → works. But careful: tests dir shouldn't have package.json.
-   Fine.
- - Need tests/auth/ maybe __init__.py for unittest discovery? python -m unittest -v tests.auth.test_session requires packages. If we run python -m unittest -v
-   tests/auth/test_session.py, unittest accepts file paths since Python 3.? python -m unittest tests/auth/test_session.py works in Python 3.5+? Actually unittest
-   supports paths via discover? python -m unittest tests/test_something.py works since Python 3.5? Let me recall: python -m unittest tests.test_module requires package.
-   But python -m unittest tests/test_module.py is supported since Python 3.5 (converts path to module name). Yes, since 3.5 it can handle file paths.
-
- But to be safe, add __init__.py to tests and tests/auth so both python -m unittest -v tests.auth.test_session and python -m unittest discover -s tests work. The task
- says "运行新测试命令" — choose python -m unittest -v tests/auth/test_session.py or python -m unittest discover -s tests -v.
-
- Let me verify python version. Also need to build first (dist exists but let's rebuild). Let's do migration:
-
- 1. mkdir tests/auth
- 2. git mv test_session.py tests/auth/test_session.py (not git tracked? project dir untracked entirely — ?? ../../ means parent untracked. Just mv).
- 3. Add __init__.py files.
- 4. Update TESTING.md.
- 5. Run npm run build then python -m unittest -v tests/auth/test_session.py (or discover).
- 6. Update memory file and log.
-
- Check README? Only TESTING.md. Search for references to test_session.py elsewhere.
-
-
- $ cd /Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo && grep -rn "test_session" --include="*.md" --include="*.json" --include="*.py"
- --include="*.ts" . --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=__pycache__; echo "---"; python3 --version; echo "---"; ls src dist
-
- ... (30 earlier lines, ctrl+o to expand)
+ ... (42 earlier lines, ctrl+o to expand)
  routes
- server.ts
+ server.js
  services
  types
  utils
 
- Took 0.2s
+ Took 0.0s
 
 
- Now perform migration. Use bash mkdir & mv, add init.py.
 
+ $ cd /Users/zhouxincheng/Documents/geekbang/homework/test-q1 && mkdir -p tests/auth && git mv test_session.py tests/auth/test_session.py 2>/dev/null || mv
+ test_session.py tests/auth/test_session.py; touch tests/__init__.py tests/auth/__init__.py; ls tests tests/auth
 
- $ cd /Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo && mkdir -p tests/auth && mv test_session.py tests/auth/test_session.py && touch
- tests/__init__.py tests/auth/__init__.py && ls -la tests tests/auth && rm -rf __pycache__
+ ... (2 earlier lines, ctrl+o to expand)
+ auth
 
- ... (8 earlier lines, ctrl+o to expand)
- total 8
- -rw-r--r--@ 1 zhouxincheng  staff     0 Nov 18 09:33 __init__.py
- drwxr-xr-x@ 4 zhouxincheng  staff   128 Nov 18 09:33 .
- drwxr-xr-x@ 4 zhouxincheng  staff   128 Nov 18 09:33 ..
- -rw-r--r--@ 1 zhouxincheng  staff  3050 Nov 18 09:21 test_session.py
+ tests/auth:
+ __init__.py
+ test_session.py
 
  Took 0.0s
 
 
- Now update TESTING.md with new path and command. Choose python -m unittest -v tests/auth/test_session.py? With init.py, python -m unittest -v tests.auth.test_session
- works. Which is more standard? Dotted module path is cleaner and docs say run from project root. Let's use python -m unittest -v tests.auth.test_session and maybe also
- mention discovery. I'll update.
+ Now update the docstring maybe to mention path? Fine. Update TESTING.md and run the test.
 
- Also add docstring update? Test file's ROOT logic still resolves to project root since parents: tests/auth → tests → login_demo (has package.json). Good.
-
- Could add a comment in test file? Not necessary. But maybe the task "同步修改测试说明" = update TESTING.md.
-
- Let's edit TESTING.md.
+ Run: python -m unittest -v tests.auth.test_session or python -m unittest -v tests/auth/test_session.py. Let's verify both work. First build (npm run build) may already
+ have dist. Run test.
 
 
- write ~/Documents/geekbang/homework/chapter04/test-01/login_demo/TESTING.md
-
- # 登录会话测试
-
- 从项目根目录安装依赖并构建应用：
-
- ```bash
- npm ci
- npm run build
- ```
-
- 测试入口为 `tests/auth/test_session.py`，在项目根目录运行：
- ... (12 more lines, 22 total, ctrl+o to expand)
-
-
- Now run build and new test command.
-
-
- $ cd /Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo && npm run build && python3 -m unittest -v tests.auth.test_session (timeout 180s)
-
- ... (6 earlier lines, ctrl+o to expand)
-
- ----------------------------------------------------------------------
- Ran 3 tests in 0.144s
-
- OK
-
- Took 1.0s
-
-
- Now also verify discovery works as documented.
-
- Then update memory: testPath tests/auth/test_session.py, command python -m unittest -v tests.auth.test_session, sources updated (test file path, TESTING.md,
- package.json), verification actual: "先 npm run build 成功；python3 -m unittest -v tests.auth.test_session 输出 Ran 3 tests in 0.144s, OK（3 项全通过）". Note project
- memory uses python -m unittest command recorded. Could include python3? The command actually run was python3 -m unittest -v tests.auth.test_session. Should record
- actual run. Use python3? Record exact.
-
- Also coverage same 3.
-
- Update memory record via project_memory update. But need update both memory/testing/session-tests.md and log.md. project_memory update might regenerate. Let's first run
- discovery check.
-
-
- $ cd /Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo && python3 -m unittest discover -s tests -v 2>&1 | tail -8 (timeout 120s)
+ $ cd /Users/zhouxincheng/Documents/geekbang/homework/test-q1 && python -m unittest -v tests.auth.test_session 2>&1 | tail -20
 
  ... (3 earlier lines, ctrl+o to expand)
 
  ----------------------------------------------------------------------
- Ran 3 tests in 0.109s
+ Ran 3 tests in 0.130s
+
+ OK
+
+ Took 0.3s
+
+
+ Also test the path form tests/auth/test_session.py.
+
+
+ $ cd /Users/zhouxincheng/Documents/geekbang/homework/test-q1 && python -m unittest -v tests/auth/test_session.py 2>&1 | tail -5 && python -m unittest discover -s tests
+ -v 2>&1 | tail -5
+
+ ... (4 earlier lines, ctrl+o to expand)
+
+ ----------------------------------------------------------------------
+ Ran 3 tests in 0.096s
+
+ OK
+
+ Took 0.5s
+
+
+ Both work. Update the test file docstring maybe mention npm run build - already. Update TESTING.md.
+
+ Also update the memory files? The memory tool writes to memory/testing/session-tests.md. Use project_memory update. But also memory/index.md may reference path. Let me
+ check index.md and log.md.
+
+
+ read ~/Documents/geekbang/homework/test-q1/memory/index.md
+
+
+
+ read ~/Documents/geekbang/homework/test-q1/memory/log.md
+
+
+
+ edit ~/Documents/geekbang/homework/test-q1/TESTING.md
+
+     ...
+   6 npm ci
+   7 npm run build
+   8 ```
+   9
+ -10 测试入口为 `test_session.py`，在项目根目录运行：
+ +10 测试入口为 `tests/auth/test_session.py`，在项目根目录运行：
+  11
+  12 ```bash
+ -13 python -m unittest -v test_session.py
+ +13 python -m unittest -v tests.auth.test_session
+  14 ```
+  15
+  16 测试会启动本项目的 Express 应用，覆盖正确登录后访问个人资料、无令牌访问被拒绝、错误密码登录被拒绝三个场景。
+
+
+
+ edit ~/Documents/geekbang/homework/test-q1/tests/auth/test_session.py
+
+ - 1 """通过 HTTP 验证课程 login_demo，运行前先执行 npm run build。"""
+ + 1 """通过 HTTP 验证课程 login_demo，运行前先执行 npm run build。
+   2
+ + 3 在项目根目录运行：python -m unittest -v tests.auth.test_session
+ + 4 """
+ + 5
+   3 import json
+   4 from pathlib import Path
+   5 import queue
+   6 import subprocess
+     ...
+
+
+
+ $ cd /Users/zhouxincheng/Documents/geekbang/homework/test-q1 && python -m unittest -v tests.auth.test_session 2>&1 | tail -8
+
+ ... (3 earlier lines, ctrl+o to expand)
+
+ ----------------------------------------------------------------------
+ Ran 3 tests in 0.107s
 
  OK
 
@@ -489,61 +444,52 @@ to-questionnaire, to-spec, to-tickets, triage, update-ai-tools, wait-what, wayfi
    "status": "updated",
    "action": "update",
    "id": "session-test-entry",
-   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/testing/session-tests.md",
+   "storagePath": "/Users/zhouxincheng/Documents/geekbang/homework/test-q1/memory/testing/session-tests.md",
    "record": {
      "testPath": "tests/auth/test_session.py",
-     "command": "python3 -m unittest -v tests.auth.test_session",
+     "command": "python -m unittest -v tests.auth.test_session",
      "sources": [
        "tests/auth/test_session.py",
- ... (11 more lines, ctrl+o to expand)
-
-
- Check the memory file and log whether update appended log entry. Then update log if needed.
-
-
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/testing/session-tests.md:1-100
+ ... (12 more lines, ctrl+o to expand)
 
 
 
- read ~/Documents/geekbang/homework/chapter04/test-01/login_demo/memory/log.md:1-100
+ read ~/Documents/geekbang/homework/test-q1/memory/testing/session-tests.md
 
 
 
- $ cd /Users/zhouxincheng/Documents/geekbang/homework/chapter04/test-01/login_demo && find . -name "test_session.py" -not -path "./node_modules/*" && git status --short
- . 2>/dev/null | head
+ edit ~/Documents/geekbang/homework/test-q1/memory/log.md
 
- ./tests/auth/test_session.py
- ?? ./
+    ...
+  2
+  3 ## 2026-11-19
+  4
+  5 - 写入「登录会话测试」。
+ +6 - 会话测试迁移到 tests/auth/test_session.py，运行命令改为 python -m unittest -v tests.auth.test_session（已实跑 3 项全部通过）。
+  6 - 更新「登录会话测试」，入口由 `test_session.py` 迁至 `tests/auth/test_session.py`，python -m unittest -v tests.auth.test_session 运行 3 项测试全部 OK（0.107s）。
 
- Took 0.1s
 
-
- Everything done. Check that TESTING.md command python -m unittest vs memory python3. Fine.
-
- One consideration: dist/ is gitignored but build artifacts updated—fine.
-
- Final concise summary with paths and commands.
-
- 迁移完成并验证通过。
+ 迁移完成。
 
  改动
- - test_session.py → tests/auth/test_session.py，新增 tests/__init__.py、tests/auth/__init__.py（支持模块路径与 discover 两种方式）
- - TESTING.md 更新入口路径与运行命令，补充 discover 用法
- - 长期记忆 memory/testing/session-tests.md 已更新（入口、命令、来源、验证结果），memory/log.md 自动追加变更记录
+ - test_session.py → tests/auth/test_session.py（ROOT 仍通过向上查找 package.json 定位项目根，无需改动）
+ - 新增 tests/__init__.py、tests/auth/__init__.py，使 python -m unittest 能以模块路径导入
+ - TESTING.md：入口与命令更新为 tests/auth/test_session.py / python -m unittest -v tests.auth.test_session
+ - 测试模块 docstring 补充了新运行方式
 
- 验证结果
+ 实际运行（项目根目录）
 
  ```bash
-   npm run build                                  # 成功
-   python3 -m unittest -v tests.auth.test_session # Ran 3 tests in 0.144s, OK
-   python3 -m unittest discover -s tests -v       # Ran 3 tests in 0.109s, OK
+   python -m unittest -v tests.auth.test_session
  ```
 
- 测试内部 ROOT 通过向上查找 package.json 定位项目根目录，迁移后仍能正确启动 Express 应用。
+ 结果：3 项全部 OK（0.107s）。另验证 python -m unittest -v tests/auth/test_session.py 与 python -m unittest discover -s tests -v 也同样通过。
+
+ 长期记忆 memory/testing/session-tests.md 已更新 testPath、command、sources，并记录最近验证结果；memory/log.md 追加了迁移记录。
 
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-~/Documents/geekbang/homework/chapter04/test-01/login_demo (master)
-↑5.3k ↓3.1k R119k CH95.3% $0.006 1.5%/1.0M (auto)                                                                                         (deepseek) deepseek-flash • high
-zhouxincheng@zhouxinchengdeMacBook-Pro login_demo %
+~/Documents/geekbang/homework/test-q1 (master)
+↑4.9k ↓2.4k R132k CH98.9% $0.005 1.3%/1.0M (auto)                                                                                         (deepseek) deepseek-flash • high
+zhouxincheng@zhouxinchengdeMacBook-Pro test-q1 %

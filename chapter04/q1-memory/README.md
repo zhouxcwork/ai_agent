@@ -64,7 +64,7 @@ npm ci
 npm run test:memory
 ```
 
-预期 3 组用例通过。测试使用临时项目目录和独立 Node.js 进程，覆盖空库、写入、跨进程回读、项目隔离、原地更新、删除及旧 JSON 导入。已安装依赖后可离线运行，无需 pi 或 DeepSeek 凭据。下节的 pi 复跑用于验证真实模型对题面指令的执行效果。
+预期 4 组用例通过。测试使用临时项目目录和独立 Node.js 进程，覆盖空库、写入、跨进程回读、项目隔离、原地更新、删除、旧 JSON 导入，以及正文写入后索引失败的重试恢复。已安装依赖后可离线运行，无需 pi 或 DeepSeek 凭据。下节的 pi 复跑用于验证真实模型对题面指令的执行效果。
 
 ## 复跑
 
@@ -109,6 +109,8 @@ memory/
 
 工具默认识别会话测试记录 `session-test-entry`，也支持指定其他测试记录 ID。已有 `.pi/project-memory.json` 可继续读取，首次成功写操作会把旧记录导入 Markdown，并将 JSON 改名留档。旧记录如果用的是仓库根相对路径，可在项目根目录重新核对后更新。
 
+首次写入时，若正文已落盘但索引或日志写入失败，工具返回 `saved_with_warning`。解除阻塞后对同一 ID 重试写入，工具补齐索引与日志并返回 `recovered`，保留已保存的正文。
+
 ## 验收材料
 
 提交时保留 `q1-memory/` 和 `evidence/q1/` 的相对目录结构。本目录的 `login_demo/` 是可从空记忆状态复跑的完整项目。手跑证据来自独立副本，`test-01/` 无需提交。
@@ -120,6 +122,6 @@ memory/
 | 迁移并更新 | [截图 3](../evidence/q1/03-update.png) 展示迁移、测试通过及原记录返回 `updated`。 |
 | 完整痕迹 | [pi 终端日志](../evidence/q1/pi_run_log.log) · [落盘索引](../evidence/q1/memory/index.md) · [变更日志](../evidence/q1/memory/log.md) · [迁移后的记忆](../evidence/q1/memory/testing/session-tests.md)。 |
 
-[补充验收](../evidence/q1/verification.md)记录提交版的独立构建、测试、项目隔离与删除检查。
+[补充验收](../evidence/q1/verification.md)记录前一版的独立构建、测试、项目隔离与删除检查。本次修复新增的索引失败恢复用例可用上文的 `npm run test:memory` 复跑。
 
 证据中的绝对路径是实跑位置。记忆正文中的测试路径、命令和来源以 `login_demo` 根目录为基准。
